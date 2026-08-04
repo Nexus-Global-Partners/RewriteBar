@@ -30,7 +30,9 @@ struct PopoverView: View {
                 .disabled(!viewModel.isEnabled)
                 .opacity(viewModel.isEnabled || viewModel.isConfirmation ? 1 : 0.52)
 
-                if viewModel.canRestorePreviousClipboard && !viewModel.isWorking {
+                if viewModel.canRestorePreviousClipboard
+                    && !viewModel.isWorking
+                    && !viewModel.isConfirmation {
                     Button {
                         if viewModel.restorePreviousClipboard() {
                             visiblePopoverWindow?.orderOut(nil)
