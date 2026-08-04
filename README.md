@@ -7,8 +7,8 @@
 <p align="center">A private, native macOS menu bar app that rewrites clipboard text with a local model.</p>
 
 <p align="center">
-  <a href="https://github.com/Nexus-Global-Partners/RewriteBar/releases/latest/download/RewriteBar.zip">
-    <img src="https://img.shields.io/badge/Download_RewriteBar-macOS-111111?style=for-the-badge&logo=apple&logoColor=white" alt="Download RewriteBar for macOS">
+  <a href="#install">
+    <img src="https://img.shields.io/badge/Install_RewriteBar-macOS-111111?style=for-the-badge&logo=apple&logoColor=white" alt="Install RewriteBar for macOS">
   </a>
 </p>
 
@@ -24,13 +24,15 @@ RewriteBar reads plain text from the clipboard only when you press Rewrite. Ever
 
 Requires an Apple Silicon Mac with macOS 14 or newer.
 
+The recommended installation verifies the release checksum and avoids the browser quarantine warning applied to direct downloads:
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Nexus-Global-Partners/RewriteBar/main/Scripts/install-release.sh | zsh
 ```
 
-You can also download `RewriteBar.zip` from the [latest release](https://github.com/Nexus-Global-Partners/RewriteBar/releases/latest), expand it, and move the app to Applications.
+You can also download `RewriteBar.zip` from the [latest release](https://github.com/Nexus-Global-Partners/RewriteBar/releases/latest), expand it, and move the app to Applications. Browser downloads are quarantined by macOS.
 
-The public build is ad hoc signed, not notarized with an Apple Developer ID. If macOS blocks the first launch, Control click RewriteBar in Finder, choose Open, then confirm Open.
+The public build is ad hoc signed, not notarized with an Apple Developer ID. If macOS blocks a manually downloaded copy, open System Settings, choose Privacy & Security, then select Open Anyway for RewriteBar. Only do this for the checksum verified release from this repository.
 
 ## Use
 
