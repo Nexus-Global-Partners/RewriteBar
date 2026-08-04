@@ -29,7 +29,7 @@ jobs:
           version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Configuration/Info.plist)
           cp "dist/RewriteBar-$version.zip" dist/RewriteBar.zip
           checksum=$(shasum -a 256 dist/RewriteBar.zip | awk '{print $1}')
-          print "$checksum  RewriteBar.zip" > dist/RewriteBar.zip.sha256
+          printf '%s  RewriteBar.zip\n' "$checksum" > dist/RewriteBar.zip.sha256
       - name: Publish release
         if: github.ref_type == 'tag'
         env:
