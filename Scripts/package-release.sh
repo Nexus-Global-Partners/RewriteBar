@@ -41,6 +41,7 @@ for source_item in \
     SECURITY.md \
     BrandAssets \
     Configuration \
+    ModelAssets/MLX \
     Scripts \
     Sources; do
     if [[ -e "$project_dir/$source_item" ]]; then

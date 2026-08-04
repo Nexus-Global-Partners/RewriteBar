@@ -38,13 +38,11 @@ jobs:
           version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Configuration/Info.plist)
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" \
-              "dist/RewriteBar-$version.zip" \
               dist/RewriteBar.zip \
               dist/RewriteBar.zip.sha256 \
               --clobber
           else
             gh release create "$GITHUB_REF_NAME" \
-              "dist/RewriteBar-$version.zip" \
               dist/RewriteBar.zip \
               dist/RewriteBar.zip.sha256 \
               --title "RewriteBar $version" \

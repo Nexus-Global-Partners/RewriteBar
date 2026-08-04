@@ -8,7 +8,8 @@ app_bundle="$project_dir/dist/RewriteBar.app"
 release_dir="$project_dir/.build/arm64-apple-macosx/release"
 model_source="$project_dir/ModelAssets/Qwen3-1.7B-4bit"
 model_destination="$app_bundle/Contents/Resources/Models/Qwen3-1.7B-4bit"
-mlx_shader_source="$release_dir/mlx.metallib"
+mlx_shader_source="$project_dir/ModelAssets/MLX/mlx.metallib"
+mlx_shader_checksums="$project_dir/Configuration/mlx-metallib.sha256"
 app_icon_source="$project_dir/BrandAssets/infinity-app-icon.svg"
 
 required_model_files=(
@@ -31,18 +32,23 @@ if [[ ! -s "$app_icon_source" ]]; then
     exit 1
 fi
 
+if [[ ! -s "$mlx_shader_source" ]]; then
+    print -u2 "Missing pinned MLX Metal library: $mlx_shader_source"
+    exit 1
+fi
+
+if ! (cd "${mlx_shader_source:h}" && shasum -a 256 -c "$mlx_shader_checksums" >/dev/null); then
+    print -u2 "The pinned MLX Metal library failed checksum verification."
+    exit 1
+fi
+
 stale_app_resource_bundle="$release_dir/RewriteBar_RewriteBar.bundle"
 if [[ -e "$stale_app_resource_bundle" ]]; then
     rm -rf "$stale_app_resource_bundle"
 fi
 
 cd "$project_dir"
-swift build -c release --arch arm64
-
-if [[ ! -s "$mlx_shader_source" ]]; then
-    print -u2 "The release build did not produce the MLX Metal library: $mlx_shader_source"
-    exit 1
-fi
+swift build -c release --arch arm64 --product RewriteBar
 
 case "$app_bundle" in
     "$project_dir/dist/RewriteBar.app") ;;
