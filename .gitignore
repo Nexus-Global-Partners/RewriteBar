@@ -1,0 +1,12 @@
+.build/
+.swiftpm/
+dist/
+ModelAssets/
+Reports/
+Design/
+.DS_Store
+*.xcuserstate
+seven-blade-app-icon.png
+seven-blade-app-icon.svg
+RewriteBar 3 Text Test Pack.md
+RewriteBar Qualitative Test Pack.md

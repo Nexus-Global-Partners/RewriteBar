@@ -1,0 +1,32 @@
+name: Feature request
+description: Propose a focused improvement to RewriteBar.
+title: "Idea: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is difficult today, and for whom?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed experience
+      description: Explain the smallest useful change.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: principles
+    attributes:
+      label: Product fit
+      options:
+        - label: This keeps clipboard processing local and private.
+          required: true
+        - label: This preserves or simplifies the focused menu bar flow.
+          required: true

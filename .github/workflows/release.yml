@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate version
+        if: github.ref_type == 'tag'
+        run: |
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Configuration/Info.plist)
+          test "$GITHUB_REF_NAME" = "v$version"
+      - name: Run checks
+        run: swift run RewriteCoreChecks
+      - name: Download verified model
+        run: ./Scripts/download-model.sh
+      - name: Package app
+        run: |
+          ./Scripts/package-release.sh
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Configuration/Info.plist)
+          cp "dist/RewriteBar-$version.zip" dist/RewriteBar.zip
+          checksum=$(shasum -a 256 dist/RewriteBar.zip | awk '{print $1}')
+          print "$checksum  RewriteBar.zip" > dist/RewriteBar.zip.sha256
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Configuration/Info.plist)
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" \
+              "dist/RewriteBar-$version.zip" \
+              dist/RewriteBar.zip \
+              dist/RewriteBar.zip.sha256 \
+              --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              "dist/RewriteBar-$version.zip" \
+              dist/RewriteBar.zip \
+              dist/RewriteBar.zip.sha256 \
+              --title "RewriteBar $version" \
+              --generate-notes
+          fi

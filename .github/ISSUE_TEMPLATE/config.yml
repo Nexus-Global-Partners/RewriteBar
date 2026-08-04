@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/Nexus-Global-Partners/RewriteBar/discussions
+    about: Use Discussions for support questions and early product ideas.
+  - name: Security report
+    url: https://github.com/Nexus-Global-Partners/RewriteBar/security/advisories/new
+    about: Report vulnerabilities privately.
