@@ -7,6 +7,12 @@
 <p align="center">A private, native macOS menu bar app that rewrites clipboard text with a local model.</p>
 
 <p align="center">
+  <a href="https://github.com/Nexus-Global-Partners/RewriteBar/releases/latest/download/RewriteBar.zip">
+    <img src="https://img.shields.io/badge/Download_RewriteBar-macOS-111111?style=for-the-badge&logo=apple&logoColor=white" alt="Download RewriteBar for macOS">
+  </a>
+</p>
+
+<p align="center">
   <a href="https://github.com/Nexus-Global-Partners/RewriteBar/actions/workflows/ci.yml"><img src="https://github.com/Nexus-Global-Partners/RewriteBar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/Nexus-Global-Partners/RewriteBar/releases/latest"><img src="https://img.shields.io/github/v/release/Nexus-Global-Partners/RewriteBar" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-black" alt="MIT License"></a>
