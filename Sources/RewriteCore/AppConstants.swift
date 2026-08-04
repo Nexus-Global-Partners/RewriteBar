@@ -2,7 +2,7 @@ import Foundation
 
 public enum AppConstants {
     public static let appName = "RewriteBar"
-    public static let bundleIdentifier = "com.nexusglobalpartners.RewriteBar"
+    public static let bundleIdentifier = "com.nexusglobalpartners.RewriteBar.Utility"
 
     public static let modelIdentifier = "mlx-community/Qwen3-1.7B-4bit"
     public static let modelDisplayName = "Qwen3 1.7B"
