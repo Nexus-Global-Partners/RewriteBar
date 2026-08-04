@@ -61,10 +61,12 @@ fi
 
 mkdir -p "$app_bundle/Contents/MacOS" "$app_bundle/Contents/Resources"
 cp "$release_dir/RewriteBar" "$app_bundle/Contents/MacOS/RewriteBar"
-cp "$mlx_shader_source" "$app_bundle/Contents/MacOS/mlx.metallib"
 cp "$project_dir/Configuration/Info.plist" "$app_bundle/Contents/Info.plist"
 mkdir -p "${model_destination:h}"
 ditto "$model_source" "$model_destination"
+mlx_resource_bundle="$app_bundle/Contents/Resources/mlx-swift_Cmlx.bundle"
+mkdir -p "$mlx_resource_bundle"
+cp "$mlx_shader_source" "$mlx_resource_bundle/default.metallib"
 
 icon_work_dir=$(mktemp -d)
 trap 'rm -rf "$icon_work_dir"' EXIT
