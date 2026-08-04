@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct RewriteBarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @AppStorage("isMenuBarExtraInserted") private var isMenuBarExtraInserted = true
     @StateObject private var viewModel = RewriteViewModel()
 
     init() {
@@ -26,7 +27,7 @@ struct RewriteBarApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra {
+        MenuBarExtra(isInserted: $isMenuBarExtraInserted) {
             PopoverView(viewModel: viewModel)
         } label: {
             Image(systemName: "infinity")
