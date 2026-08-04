@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GlassyIntensitySlider: View {
     @Binding var value: Double
+    let loadingProgress: Double?
     let onEditingChanged: (Bool) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -15,9 +16,11 @@ struct GlassyIntensitySlider: View {
 
     init(
         value: Binding<Double>,
+        loadingProgress: Double? = nil,
         onEditingChanged: @escaping (Bool) -> Void = { _ in }
     ) {
         _value = value
+        self.loadingProgress = loadingProgress
         self.onEditingChanged = onEditingChanged
     }
 
@@ -30,6 +33,10 @@ struct GlassyIntensitySlider: View {
             let progress = CGFloat((value - range.lowerBound) / (range.upperBound - range.lowerBound))
             let progressWidth = availableWidth * progress
             let thumbOffset = endpointPadding + thumbInset + progressWidth
+            let loadingValue = CGFloat(min(1, max(0, loadingProgress ?? 0)))
+            let loadingWidth = availableWidth * loadingValue
+            let loadingOffset = endpointPadding + thumbInset + loadingWidth
+            let isLoading = loadingProgress != nil
 
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -106,7 +113,6 @@ struct GlassyIntensitySlider: View {
                             endPoint: .trailing
                         )
                     )
-                    .opacity(0.78)
                     .overlay(alignment: .top) {
                         Capsule()
                             .fill(.white.opacity(0.52))
@@ -119,6 +125,7 @@ struct GlassyIntensitySlider: View {
                     }
                     .frame(width: max(6, progressWidth), height: 8)
                     .padding(.leading, endpointPadding + thumbFootprint / 2)
+                    .opacity(isLoading ? 0 : 0.78)
 
                 ZStack {
                     Circle()
@@ -147,6 +154,31 @@ struct GlassyIntensitySlider: View {
                 .frame(width: thumbSize, height: thumbSize)
                 .scaleEffect(isFocused ? focusedThumbScale : 1)
                 .offset(x: thumbOffset)
+                .opacity(isLoading ? 0 : 1)
+
+                Capsule(style: .continuous)
+                    .fill(AppPalette.graphite.opacity(0.30))
+                    .overlay(alignment: .top) {
+                        Capsule()
+                            .fill(.white.opacity(0.62))
+                            .frame(height: 1)
+                    }
+                    .frame(width: loadingWidth, height: 8)
+                    .padding(.leading, endpointPadding + thumbFootprint / 2)
+                    .opacity(isLoading && loadingValue > 0.001 ? 1 : 0)
+
+                ZStack {
+                    Circle()
+                        .fill(.white.opacity(0.96))
+                    Circle()
+                        .strokeBorder(.white.opacity(0.84), lineWidth: 0.7)
+                    Circle()
+                        .strokeBorder(AppPalette.graphite.opacity(0.10), lineWidth: 0.8)
+                }
+                .frame(width: 14, height: 14)
+                .shadow(color: .white.opacity(0.52), radius: 3)
+                .offset(x: loadingOffset + (thumbSize - 14) / 2)
+                .opacity(isLoading && loadingValue > 0.001 ? 1 : 0)
             }
             .contentShape(Rectangle())
             .gesture(
@@ -177,19 +209,30 @@ struct GlassyIntensitySlider: View {
             }
             .animation(reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.78), value: value)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: isFocused)
+            .animation(reduceMotion ? nil : .linear(duration: 0.12), value: loadingProgress)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: isLoading)
         }
         .frame(height: 34)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Rewrite intensity")
-        .accessibilityValue(accessibilityValue)
-        .accessibilityHint("Use the arrow keys to choose a level from zero to ten.")
+        .accessibilityLabel(loadingProgress == nil ? "Rewrite intensity" : "Rewrite progress")
+        .accessibilityValue(loadingProgress == nil ? accessibilityValue : loadingAccessibilityValue)
+        .accessibilityHint(
+            loadingProgress == nil
+                ? "Use the arrow keys to choose a level from zero to ten."
+                : "The rewrite is in progress."
+        )
         .accessibilityAdjustableAction { direction in
+            guard loadingProgress == nil else { return }
             switch direction {
             case .increment: commitAdjustment(by: 1)
             case .decrement: commitAdjustment(by: -1)
             @unknown default: break
             }
         }
+    }
+
+    private var loadingAccessibilityValue: String {
+        "\(Int((loadingProgress ?? 0) * 100)) percent"
     }
 
     private var accessibilityValue: String {

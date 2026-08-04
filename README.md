@@ -40,9 +40,9 @@ The public build is ad hoc signed, not notarized with an Apple Developer ID. If 
 2. Click the infinity icon in the menu bar.
 3. Choose an intensity from 0 through 10.
 4. Press Rewrite.
-5. Press Copy Rewrite when the result is ready.
+5. Keep the popover open and the finished rewrite is copied automatically.
 
-The popover closes after copying. A subtle curved arrow lets you restore the previous clipboard entry until you copy something else.
+The slider becomes a minimal progress rail while RewriteBar works. When the rewrite is copied, the button briefly confirms Copied with a checkmark. If you close the popover before processing finishes, the result waits safely as Copy Rewrite the next time you open it. A subtle curved arrow lets you restore the previous clipboard entry until you copy something else.
 
 The slider controls how much RewriteBar changes:
 
@@ -99,7 +99,7 @@ API latency went from 180 ms to 640 ms between 09:10 and 09:35 UTC only in eu we
 
 * `RewriteCore` handles validation, prompt construction, and safe output cleanup.
 * `LocalModelService` loads the bundled model, generates text, and supports cancellation.
-* `RewriteViewModel` owns the manual rewrite, copy, undo, and failure states.
+* `RewriteViewModel` owns rewrite, progress, automatic copy, pending copy, undo, and failure states.
 * SwiftUI provides the compact `MenuBarExtra`, keyboard access, VoiceOver labels, and light and dark materials.
 
 Inputs longer than 20,000 visible characters are rejected to keep latency and memory predictable. Generation is deterministic, bounded, and configured with thinking disabled.

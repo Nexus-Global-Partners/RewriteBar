@@ -7,9 +7,12 @@ struct PopoverView: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            GlassyIntensitySlider(value: $viewModel.intensity)
-                .disabled(viewModel.isWorking)
-                .opacity(viewModel.isWorking ? 0.72 : 1)
+            GlassyIntensitySlider(
+                value: $viewModel.intensity,
+                loadingProgress: viewModel.isWorking ? viewModel.rewriteProgress : nil
+            )
+                .disabled(viewModel.isWorking || viewModel.isConfirmation)
+                .opacity(viewModel.isConfirmation ? 0.72 : 1)
 
             ZStack(alignment: .leading) {
                 PrimaryActionButton(
@@ -25,7 +28,7 @@ struct PopoverView: View {
                     }
                 )
                 .disabled(!viewModel.isEnabled)
-                .opacity(viewModel.isEnabled ? 1 : 0.52)
+                .opacity(viewModel.isEnabled || viewModel.isConfirmation ? 1 : 0.52)
 
                 if viewModel.canRestorePreviousClipboard && !viewModel.isWorking {
                     Button {
@@ -53,6 +56,9 @@ struct PopoverView: View {
         .tint(AppPalette.accent)
         .onAppear {
             viewModel.popoverOpened()
+        }
+        .onDisappear {
+            viewModel.popoverClosed()
         }
         .animation(
             reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.86),
