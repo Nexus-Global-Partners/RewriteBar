@@ -61,3 +61,5 @@ Level 10 takes longer because it performs a deeper rewrite. All nine final outpu
 ## Release decision
 
 Ship the completion and lifecycle changes. Keep the existing prompt and prefill configuration. Future performance work should target model execution or speculative output, not prompt compression.
+
+The extended release check exposed a separate macOS lifecycle issue after 27 idle minutes. That fix ships in 1.2.5 and does not change the performance results above.

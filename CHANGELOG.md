@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.5
+
+* Keeps the menu bar item available during long idle periods with an AppKit-owned status item.
+
 ## 1.2.4
 
 * Starts model warmup at foreground priority so the first rewrite is ready sooner.

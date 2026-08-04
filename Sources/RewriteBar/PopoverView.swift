@@ -3,6 +3,7 @@ import SwiftUI
 
 struct PopoverView: View {
     @ObservedObject var viewModel: RewriteViewModel
+    var close: () -> Void = {}
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -21,9 +22,8 @@ struct PopoverView: View {
                     isWorking: viewModel.isWorking,
                     accessibilityHint: viewModel.accessibilityHint,
                     action: {
-                        let popoverWindow = visiblePopoverWindow
                         if viewModel.perform() {
-                            popoverWindow?.orderOut(nil)
+                            close()
                         }
                     }
                 )
@@ -35,7 +35,7 @@ struct PopoverView: View {
                     && !viewModel.isConfirmation {
                     Button {
                         if viewModel.restorePreviousClipboard() {
-                            visiblePopoverWindow?.orderOut(nil)
+                            close()
                         }
                     } label: {
                         Image(systemName: "arrow.uturn.backward")
@@ -48,7 +48,6 @@ struct PopoverView: View {
                     .help("Restore previous clipboard text")
                     .accessibilityLabel("Restore previous clipboard text")
                     .padding(.leading, 8)
-                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
                 }
             }
         }
@@ -66,10 +65,6 @@ struct PopoverView: View {
             reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.86),
             value: viewModel.state
         )
-    }
-
-    private var visiblePopoverWindow: NSWindow? {
-        NSApp.keyWindow ?? NSApp.windows.first(where: \.isVisible)
     }
 
     private var glassBackground: some View {
