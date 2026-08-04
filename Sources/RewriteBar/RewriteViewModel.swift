@@ -226,15 +226,7 @@ final class RewriteViewModel: ObservableObject {
                 preparedOutput = output
                 if isPopoverVisible {
                     rewriteProgress = 1
-                    try await Task.sleep(for: .milliseconds(180))
-                    try Task.checkCancellation()
-                    guard requestID == generationID else { return }
-                    if isPopoverVisible {
-                        _ = copyPreparedResult(showConfirmation: true)
-                    } else {
-                        rewriteProgress = 0
-                        state = .ready
-                    }
+                    _ = copyPreparedResult(showConfirmation: true)
                 } else {
                     rewriteProgress = 0
                     state = .ready

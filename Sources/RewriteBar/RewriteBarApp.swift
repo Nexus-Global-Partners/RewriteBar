@@ -21,7 +21,7 @@ struct RewriteBarApp: App {
     @StateObject private var viewModel = RewriteViewModel()
 
     init() {
-        Task.detached(priority: .utility) {
+        Task.detached(priority: .userInitiated) {
             await LocalModelService.shared.warmUp()
         }
     }

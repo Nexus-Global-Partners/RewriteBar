@@ -10,6 +10,5 @@ public enum AppConstants {
 
     public static let maximumInputCharacters = 20_000
     public static let keepsModelResident = true
-    public static let modelIdleLifetime: Duration = .seconds(1_800)
     public static let modelCacheLimitBytes = 1_024 * 1_024 * 1_024
 }

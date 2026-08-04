@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.4
+
+* Starts model warmup at foreground priority so the first rewrite is ready sooner.
+* Removes the pause between finishing a rewrite and copying it to the clipboard.
+* Keeps the local model ready for the next rewrite with a simpler runtime lifecycle.
+* Keeps RewriteBar running when macOS hides its menu bar item.
+* Hides the restore arrow after a rewrite has already been copied.
+
 ## 1.2.2
 
 * Copies a finished rewrite automatically when the popover remains open.

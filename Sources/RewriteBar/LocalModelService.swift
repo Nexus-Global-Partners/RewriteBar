@@ -14,10 +14,8 @@ actor LocalModelService {
     )
     private var modelContainer: ModelContainer?
     private var modelPreparationTask: Task<ModelContainer, Error>?
-    private var releaseTask: Task<Void, Never>?
     private var isGenerationActive = false
     private var generationWaiters: [CheckedContinuation<Void, Never>] = []
-    private var operationID = UUID()
     private var isWarmedUp = false
 
     init() {
@@ -53,14 +51,7 @@ actor LocalModelService {
             let preparedInput = try await modelContainer.prepare(input: input)
             let stream = try await modelContainer.generate(
                 input: preparedInput,
-                parameters: GenerateParameters(
-                    maxTokens: 12,
-                    kvBits: 8,
-                    temperature: 0,
-                    repetitionPenalty: 1.03,
-                    repetitionContextSize: 64,
-                    prefillStepSize: 512
-                )
+                parameters: generationParameters(maxTokens: 12)
             )
 
             for await _ in stream {
@@ -68,11 +59,10 @@ actor LocalModelService {
             }
             isWarmedUp = true
             logger.notice("Model warm-up completed")
-            scheduleRelease()
         } catch is CancellationError {
-            scheduleRelease()
+            return
         } catch let error as RewriteError where error == .cancelled {
-            scheduleRelease()
+            return
         } catch {
             logger.warning("Model warm-up failed: \(String(reflecting: error), privacy: .public)")
         }
@@ -80,7 +70,6 @@ actor LocalModelService {
 
     func prepareModel() async throws {
         if modelContainer != nil {
-            scheduleRelease()
             return
         }
 
@@ -92,7 +81,6 @@ actor LocalModelService {
             do {
                 modelContainer = try await modelPreparationTask.value
                 try Task.checkCancellation()
-                scheduleRelease()
                 return
             } catch is CancellationError {
                 throw RewriteError.cancelled
@@ -114,7 +102,6 @@ actor LocalModelService {
             modelPreparationTask = nil
             modelContainer = container
             try Task.checkCancellation()
-            scheduleRelease()
         } catch is CancellationError {
             modelPreparationTask = nil
             throw RewriteError.cancelled
@@ -149,7 +136,6 @@ actor LocalModelService {
             throw RewriteError.modelUnavailable
         }
 
-        releaseTask?.cancel()
         let protectedSource = SourceInstructionProtector.protect(text)
 
         let input = UserInput(
@@ -166,17 +152,11 @@ actor LocalModelService {
         do {
             try Task.checkCancellation()
             let preparedInput = try await modelContainer.prepare(input: input)
-            let parameters = GenerateParameters(
-                maxTokens: RewritePromptBuilder.maximumOutputTokens(for: text),
-                kvBits: 8,
-                temperature: 0,
-                repetitionPenalty: 1.03,
-                repetitionContextSize: 64,
-                prefillStepSize: 512
-            )
             let stream = try await modelContainer.generate(
                 input: preparedInput,
-                parameters: parameters
+                parameters: generationParameters(
+                    maxTokens: RewritePromptBuilder.maximumOutputTokens(for: text)
+                )
             )
 
             var output = ""
@@ -187,7 +167,6 @@ actor LocalModelService {
                 }
             }
 
-            scheduleRelease()
             Memory.clearCache()
             let restored = protectedSource.restoringProtectedContent(in: output)
                 ?? text
@@ -201,47 +180,26 @@ actor LocalModelService {
                 source: text
             )
         } catch is CancellationError {
-            scheduleRelease()
             Memory.clearCache()
             throw RewriteError.cancelled
         } catch let error as RewriteError {
-            scheduleRelease()
             Memory.clearCache()
             throw error
         } catch {
-            scheduleRelease()
             Memory.clearCache()
             throw RewriteError.generationFailed
         }
     }
 
-    private func scheduleRelease() {
-        releaseTask?.cancel()
-        guard !AppConstants.keepsModelResident else {
-            releaseTask = nil
-            return
-        }
-
-        operationID = UUID()
-        let expectedID = operationID
-
-        releaseTask = Task { [weak self] in
-            do {
-                try await Task.sleep(for: AppConstants.modelIdleLifetime)
-                await self?.releaseIfIdle(expectedID: expectedID)
-            } catch {
-                // A new request superseded this release timer.
-            }
-        }
-    }
-
-    private func releaseIfIdle(expectedID: UUID) {
-        guard expectedID == operationID else { return }
-        modelPreparationTask?.cancel()
-        modelPreparationTask = nil
-        modelContainer = nil
-        isWarmedUp = false
-        Memory.clearCache()
+    private func generationParameters(maxTokens: Int) -> GenerateParameters {
+        GenerateParameters(
+            maxTokens: maxTokens,
+            kvBits: 8,
+            temperature: 0,
+            repetitionPenalty: 1.03,
+            repetitionContextSize: 64,
+            prefillStepSize: 512
+        )
     }
 
     private func acquireGenerationSlot() async {
