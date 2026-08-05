@@ -7,6 +7,10 @@
 <p align="center">A private, native macOS menu bar app that rewrites clipboard text with a local model.</p>
 
 <p align="center">
+  <img src="BrandAssets/rewritebar-menu-bar.png" width="800" alt="RewriteBar open from the macOS menu bar with its rewrite intensity slider">
+</p>
+
+<p align="center">
   <a href="#install">
     <img src="https://img.shields.io/badge/Install_RewriteBar-macOS-111111?style=for-the-badge&logo=apple&logoColor=white" alt="Install RewriteBar for macOS">
   </a>
