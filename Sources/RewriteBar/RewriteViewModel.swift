@@ -7,8 +7,8 @@ final class RewriteViewModel: ObservableObject {
     enum State: Equatable {
         case idle
         case rewriting
-        case ready
         case copied
+        case restored
         case failed(RewriteError)
     }
 
@@ -17,15 +17,8 @@ final class RewriteViewModel: ObservableObject {
     @Published private(set) var rewriteProgress = 0.0
     @Published var intensity: Double {
         didSet {
-            let oldLevel = Int(oldValue.rounded())
             let newLevel = Int(intensity.rounded())
             UserDefaults.standard.set(newLevel, forKey: Self.intensityKey)
-
-            if oldLevel != newLevel, state == .ready {
-                preparedOutput = nil
-                sourceText = nil
-                state = .idle
-            }
         }
     }
 
@@ -40,9 +33,9 @@ final class RewriteViewModel: ObservableObject {
     private var copiedRewriteText: String?
     private var generationTask: Task<Void, Never>?
     private var progressTask: Task<Void, Never>?
-    private var copiedConfirmationTask: Task<Void, Never>?
+    private var confirmationTask: Task<Void, Never>?
     private var generationID = UUID()
-    private var isPopoverVisible = false
+    private var popoverVisibility = PopoverVisibilityTracker()
 
     init(modelService: LocalModelService = .shared) {
         self.modelService = modelService
@@ -57,10 +50,10 @@ final class RewriteViewModel: ObservableObject {
             return "Rewrite"
         case .rewriting:
             return "Rewriting · Cancel"
-        case .ready:
-            return "Copy Rewrite"
         case .copied:
-            return "Copied"
+            return "Copied to Clipboard"
+        case .restored:
+            return "Copied to Clipboard"
         case .failed(let error):
             return errorButtonTitle(for: error)
         }
@@ -68,11 +61,11 @@ final class RewriteViewModel: ObservableObject {
 
     var symbol: String {
         switch state {
-        case .idle, .ready:
+        case .idle:
             return "infinity"
         case .rewriting:
             return "circle.dotted"
-        case .copied:
+        case .copied, .restored:
             return "checkmark"
         case .failed:
             return "exclamationmark.triangle"
@@ -85,9 +78,9 @@ final class RewriteViewModel: ObservableObject {
 
     var isEnabled: Bool {
         switch state {
-        case .idle, .rewriting, .ready:
+        case .idle, .rewriting:
             return true
-        case .copied:
+        case .copied, .restored:
             return false
         case .failed(let error):
             return errorAllowsRetry(error)
@@ -95,7 +88,7 @@ final class RewriteViewModel: ObservableObject {
     }
 
     var isConfirmation: Bool {
-        state == .copied
+        state == .copied || state == .restored
     }
 
     var accessibilityHint: String {
@@ -104,10 +97,10 @@ final class RewriteViewModel: ObservableObject {
             return "Rewrites the plain text currently on the clipboard."
         case .rewriting:
             return "Cancels the current rewrite."
-        case .ready:
-            return "Copies the finished rewrite to the clipboard."
         case .copied:
             return "The rewrite was copied to the clipboard."
+        case .restored:
+            return "The previous text was copied to the clipboard."
         case .failed:
             return isEnabled
                 ? "Tries the rewrite again using the current clipboard text."
@@ -116,7 +109,7 @@ final class RewriteViewModel: ObservableObject {
     }
 
     func popoverOpened() {
-        isPopoverVisible = true
+        popoverVisibility.opened()
         validateClipboardHistory()
 
         if case .failed = state {
@@ -125,11 +118,11 @@ final class RewriteViewModel: ObservableObject {
     }
 
     func popoverClosed() {
-        isPopoverVisible = false
+        popoverVisibility.closed()
 
-        if state == .copied {
-            copiedConfirmationTask?.cancel()
-            copiedConfirmationTask = nil
+        if isConfirmation {
+            confirmationTask?.cancel()
+            confirmationTask = nil
             state = .idle
         }
     }
@@ -144,13 +137,15 @@ final class RewriteViewModel: ObservableObject {
         generationTask?.cancel()
         progressTask?.cancel()
         progressTask = nil
-        copiedConfirmationTask?.cancel()
-        copiedConfirmationTask = nil
+        confirmationTask?.cancel()
+        confirmationTask = nil
         clipboard.writePlainText(previousClipboardText)
         clearClipboardHistory()
         sourceText = nil
         preparedOutput = nil
-        state = .idle
+        rewriteProgress = 0
+        state = .restored
+        scheduleConfirmationReset()
         return true
     }
 
@@ -163,9 +158,7 @@ final class RewriteViewModel: ObservableObject {
         case .rewriting:
             cancelRewrite()
             return false
-        case .ready:
-            return copyPreparedResult()
-        case .copied:
+        case .copied, .restored:
             return false
         case .failed(let error) where errorAllowsRetry(error):
             startRewrite()
@@ -189,8 +182,8 @@ final class RewriteViewModel: ObservableObject {
 
         generationTask?.cancel()
         progressTask?.cancel()
-        copiedConfirmationTask?.cancel()
-        copiedConfirmationTask = nil
+        confirmationTask?.cancel()
+        confirmationTask = nil
         let requestID = UUID()
         generationID = requestID
         let rewriteIntensity = Int(intensity.rounded())
@@ -199,7 +192,7 @@ final class RewriteViewModel: ObservableObject {
         preparedOutput = nil
         rewriteProgress = 0
         state = .rewriting
-        startProgressAnimation()
+        startProgressAnimation(forCharacterCount: text.count)
 
         let activity = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiated, .latencyCritical],
@@ -216,7 +209,14 @@ final class RewriteViewModel: ObservableObject {
                 let output = try await rewrite(
                     text: text,
                     intensity: rewriteIntensity,
-                    modelService: modelService
+                    modelService: modelService,
+                    onProgress: { [weak self] generatedCharacterCount in
+                        await self?.updateGenerationProgress(
+                            generatedCharacterCount: generatedCharacterCount,
+                            sourceCharacterCount: text.count,
+                            requestID: requestID
+                        )
+                    }
                 )
                 try Task.checkCancellation()
                 guard requestID == generationID else { return }
@@ -224,13 +224,10 @@ final class RewriteViewModel: ObservableObject {
                 progressTask?.cancel()
                 progressTask = nil
                 preparedOutput = output
-                if isPopoverVisible {
-                    rewriteProgress = 1
-                    _ = copyPreparedResult(showConfirmation: true)
-                } else {
-                    rewriteProgress = 0
-                    state = .ready
-                }
+                rewriteProgress = popoverVisibility.isVisible ? 1 : 0
+                _ = copyPreparedResult(
+                    showConfirmation: popoverVisibility.isVisible
+                )
             } catch is CancellationError {
                 return
             } catch let error as RewriteError {
@@ -250,7 +247,8 @@ final class RewriteViewModel: ObservableObject {
     private func rewrite(
         text: String,
         intensity: Int,
-        modelService: LocalModelService
+        modelService: LocalModelService,
+        onProgress: @escaping @Sendable (Int) async -> Void
     ) async throws -> String {
         let timeout = PreparationPolicy.timeoutSeconds(
             forCharacterCount: text.count
@@ -260,7 +258,8 @@ final class RewriteViewModel: ObservableObject {
             group.addTask {
                 try await modelService.rewrite(
                     text: text,
-                    intensity: intensity
+                    intensity: intensity,
+                    onProgress: onProgress
                 )
             }
             group.addTask {
@@ -281,8 +280,8 @@ final class RewriteViewModel: ObservableObject {
         generationTask = nil
         progressTask?.cancel()
         progressTask = nil
-        copiedConfirmationTask?.cancel()
-        copiedConfirmationTask = nil
+        confirmationTask?.cancel()
+        confirmationTask = nil
         generationID = UUID()
         sourceText = nil
         preparedOutput = nil
@@ -290,7 +289,7 @@ final class RewriteViewModel: ObservableObject {
         state = .idle
     }
 
-    private func startProgressAnimation() {
+    private func startProgressAnimation(forCharacterCount characterCount: Int) {
         progressTask?.cancel()
         let startedAt = Date()
 
@@ -300,9 +299,26 @@ final class RewriteViewModel: ObservableObject {
                 guard !Task.isCancelled, let self, state == .rewriting else { return }
 
                 let elapsed = Date().timeIntervalSince(startedAt)
-                rewriteProgress = min(0.96, 1 - exp(-elapsed / 2.2))
+                let preparationProgress = RewriteProgressPolicy.preparationProgress(
+                    elapsedSeconds: elapsed,
+                    sourceCharacterCount: characterCount
+                )
+                rewriteProgress = max(rewriteProgress, preparationProgress)
             }
         }
+    }
+
+    private func updateGenerationProgress(
+        generatedCharacterCount: Int,
+        sourceCharacterCount: Int,
+        requestID: UUID
+    ) {
+        guard requestID == generationID, state == .rewriting else { return }
+        let generationProgress = RewriteProgressPolicy.generationProgress(
+            generatedCharacterCount: generatedCharacterCount,
+            sourceCharacterCount: sourceCharacterCount
+        )
+        rewriteProgress = max(rewriteProgress, generationProgress)
     }
 
     private func copyPreparedResult(showConfirmation: Bool = false) -> Bool {
@@ -322,22 +338,22 @@ final class RewriteViewModel: ObservableObject {
 
         if showConfirmation {
             state = .copied
-            scheduleCopiedReset()
+            scheduleConfirmationReset()
         } else {
             state = .idle
         }
         return true
     }
 
-    private func scheduleCopiedReset() {
-        copiedConfirmationTask?.cancel()
-        copiedConfirmationTask = Task { [weak self] in
+    private func scheduleConfirmationReset() {
+        confirmationTask?.cancel()
+        confirmationTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(1_200))
             guard !Task.isCancelled, let self else { return }
-            if state == .copied {
+            if isConfirmation {
                 state = .idle
             }
-            copiedConfirmationTask = nil
+            confirmationTask = nil
         }
     }
 
@@ -365,8 +381,8 @@ final class RewriteViewModel: ObservableObject {
     private func showFailure(_ error: RewriteError) {
         progressTask?.cancel()
         progressTask = nil
-        copiedConfirmationTask?.cancel()
-        copiedConfirmationTask = nil
+        confirmationTask?.cancel()
+        confirmationTask = nil
         preparedOutput = nil
         sourceText = nil
         rewriteProgress = 0
@@ -388,8 +404,8 @@ final class RewriteViewModel: ObservableObject {
             return "Copy Text First"
         case .unsupportedClipboard:
             return "Plain Text Only"
-        case .textTooLong:
-            return "Text Is Too Long"
+        case .textTooLong(let maximum):
+            return "\(maximum.formatted()) Character Limit"
         case .modelUnavailable:
             return "App Is Incomplete"
         case .modelLoadFailed:

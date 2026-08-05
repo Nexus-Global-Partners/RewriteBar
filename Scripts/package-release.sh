@@ -8,10 +8,10 @@ project_dir=${script_dir:h}
 version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$project_dir/Configuration/Info.plist")
 release_name="RewriteBar $version"
 release_zip="$project_dir/dist/RewriteBar-$version.zip"
-guide_source="$project_dir/RewriteBar Agent Onboarding.md"
+guide_source="$project_dir/AGENTS.md"
 
 if [[ ! -s "$guide_source" ]]; then
-    print -u2 "Missing agent onboarding guide: $guide_source"
+    print -u2 "Missing agent guide: $guide_source"
     exit 1
 fi
 
@@ -25,11 +25,12 @@ source_zip="$release_folder/RewriteBar Source.zip"
 
 mkdir -p "$release_folder" "$source_folder"
 ditto "$project_dir/dist/RewriteBar.app" "$release_folder/RewriteBar.app"
-cp "$guide_source" "$release_folder/RewriteBar Agent Onboarding.md"
+cp "$guide_source" "$release_folder/AGENTS.md"
 
 for source_item in \
     .gitignore \
     .github \
+    AGENTS.md \
     CHANGELOG.md \
     CODE_OF_CONDUCT.md \
     CONTRIBUTING.md \
@@ -37,7 +38,7 @@ for source_item in \
     Package.swift \
     Package.resolved \
     README.md \
-    "RewriteBar Agent Onboarding.md" \
+    RELEASING.md \
     SECURITY.md \
     BrandAssets \
     Configuration \

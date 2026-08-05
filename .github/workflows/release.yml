@@ -13,14 +13,21 @@ jobs:
   release:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - name: Cache Swift dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-swift-${{ hashFiles('Package.resolved') }}
       - name: Validate version
         if: github.ref_type == 'tag'
         run: |
           version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Configuration/Info.plist)
           test "$GITHUB_REF_NAME" = "v$version"
       - name: Run checks
-        run: swift run RewriteCoreChecks
+        run: ./Scripts/check-project.sh
       - name: Download verified model
         run: ./Scripts/download-model.sh
       - name: Package app

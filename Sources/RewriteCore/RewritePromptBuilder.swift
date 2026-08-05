@@ -57,7 +57,7 @@ public enum RewritePromptBuilder {
     public static func maximumOutputTokens(for input: String) -> Int {
         let estimatedInputTokens = max(1, input.utf8.count / 3)
         let rewriteAllowance = estimatedInputTokens + max(32, estimatedInputTokens / 2)
-        return min(6_000, max(64, rewriteAllowance))
+        return min(2_048, max(64, rewriteAllowance))
     }
 
     public static func detectedLanguageDescription(for text: String) -> String {

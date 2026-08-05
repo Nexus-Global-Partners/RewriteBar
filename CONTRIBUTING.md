@@ -4,20 +4,29 @@ Thanks for helping improve RewriteBar.
 
 ## Before you start
 
-Search existing Issues and Discussions. Open an issue before a large behavior, architecture, model, or interface change so the direction can be agreed first.
+Read [AGENTS.md](AGENTS.md), then search existing Issues and Discussions. Open an issue before a new control, workflow, model, dependency, or architecture change so product direction is agreed before implementation.
 
-## Development
+Small bug fixes, accessibility improvements, tests, and documentation corrections can go directly to a focused pull request.
 
-1. Fork the repository and create a focused branch.
-2. Make the smallest coherent change.
-3. Run the checks:
+## Start a branch
+
+1. Fork the repository.
+2. Create a branch from the latest `main`.
+3. Make the smallest coherent change that solves the reported problem.
+
+The fast development path does not need model weights:
 
 ```sh
-swift build
-swift run RewriteCoreChecks
+git clone https://github.com/YOUR_ACCOUNT/RewriteBar.git
+cd RewriteBar
+./Scripts/check-project.sh
 ```
 
-The normal checks do not require model weights. For a complete app build:
+Add or update a check in `Sources/RewriteCoreChecks` when behavior can be tested without the model.
+
+## Test the complete app
+
+Interface and model runtime changes also require the pinned local model:
 
 ```sh
 ./Scripts/download-model.sh
@@ -25,7 +34,20 @@ The normal checks do not require model weights. For a complete app build:
 codesign --verify --deep --strict dist/RewriteBar.app
 ```
 
-4. Describe the user facing effect and how you tested it in the pull request.
+Open the built app and test the complete menu bar flow with invented text. Check levels 0, 3, 5, and 10 when prompt or generation behavior changes. Never paste private clipboard content into an issue, test, log, screenshot, or pull request.
+
+## Open the pull request
+
+The pull request should state:
+
+* what changes for the user
+* why the change fits a local, fast, minimal menu bar tool
+* the exact checks and manual flow you ran
+* a screenshot for visible interface changes
+
+CI runs `./Scripts/check-project.sh` on every pull request. A maintainer will review product fit, privacy, failure behavior, accessibility, and whether the change adds permanent interface or maintenance cost.
+
+Keep commits focused and do not include generated files. Maintainers handle versioning and releases after merge using [RELEASING.md](RELEASING.md).
 
 Never commit model weights, app bundles, release archives, benchmark output, clipboard content, or credentials.
 

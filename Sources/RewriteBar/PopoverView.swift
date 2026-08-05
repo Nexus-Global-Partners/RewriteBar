@@ -1,4 +1,5 @@
 import AppKit
+import RewriteCore
 import SwiftUI
 
 struct PopoverView: View {
@@ -22,7 +23,11 @@ struct PopoverView: View {
                     isWorking: viewModel.isWorking,
                     accessibilityHint: viewModel.accessibilityHint,
                     action: {
-                        if viewModel.perform() {
+                        let succeeded = viewModel.perform()
+                        if PopoverActionRouter.shouldClosePopover(
+                            after: .primary,
+                            succeeded: succeeded
+                        ) {
                             close()
                         }
                     }
@@ -34,7 +39,11 @@ struct PopoverView: View {
                     && !viewModel.isWorking
                     && !viewModel.isConfirmation {
                     Button {
-                        if viewModel.restorePreviousClipboard() {
+                        let succeeded = viewModel.restorePreviousClipboard()
+                        if PopoverActionRouter.shouldClosePopover(
+                            after: .restore,
+                            succeeded: succeeded
+                        ) {
                             close()
                         }
                     } label: {
@@ -55,11 +64,27 @@ struct PopoverView: View {
         .frame(width: 292)
         .background { glassBackground }
         .tint(AppPalette.accent)
-        .onAppear {
-            viewModel.popoverOpened()
-        }
-        .onDisappear {
-            viewModel.popoverClosed()
+        .task(id: viewModel.state) {
+            let completionAction: PopoverAction
+            switch viewModel.state {
+            case .copied:
+                completionAction = .automaticRewrite
+            case .restored:
+                completionAction = .automaticRecovery
+            default:
+                return
+            }
+
+            try? await Task.sleep(for: .milliseconds(450))
+            guard !Task.isCancelled,
+                  viewModel.isConfirmation,
+                  PopoverActionRouter.shouldClosePopover(
+                      after: completionAction,
+                      succeeded: true
+                  ) else {
+                return
+            }
+            close()
         }
         .animation(
             reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.86),
