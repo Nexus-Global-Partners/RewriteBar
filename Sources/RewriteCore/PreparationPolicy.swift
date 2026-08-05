@@ -1,6 +1,6 @@
 public enum PreparationPolicy {
     public static func timeoutSeconds(forCharacterCount characterCount: Int) -> Double {
-        let scaledTimeout = 18 + Double(max(0, characterCount)) / 300
-        return min(90, max(20, scaledTimeout))
+        let scaledTimeout = 10 + Double(max(0, characterCount)) / 250
+        return min(18, max(12, scaledTimeout))
     }
 }

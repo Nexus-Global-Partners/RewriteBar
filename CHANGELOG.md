@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.7
+
+* Makes rewrite progress follow text actually generated instead of appearing stuck near completion.
+* Rejects document sized input immediately with a clear 2,000 character boundary.
+* Copies every completed rewrite automatically, confirms Copied to Clipboard, closes the popover, and returns focus to the previous app when macOS permits it.
+* Makes clipboard restore follow the same automatic confirmation and close flow.
+* Adds one project check command, one agent guide, and a guarded release command for contributors and maintainers.
+
 ## 1.2.6
 
 * Resumes interrupted release downloads and detects stalled transfers sooner.

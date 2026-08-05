@@ -34,15 +34,25 @@ You can also download `RewriteBar.zip` from the [latest release](https://github.
 
 The public build is ad hoc signed, not notarized with an Apple Developer ID. If macOS blocks a manually downloaded copy, open System Settings, choose Privacy & Security, then select Open Anyway for RewriteBar. Only do this for the checksum verified release from this repository.
 
+## Update
+
+Rerun the same verified command whenever a new release is available:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Nexus-Global-Partners/RewriteBar/main/Scripts/install-release.sh | zsh
+```
+
+It replaces the existing copy in `~/Applications`, verifies the signature, and opens the current release. RewriteBar performs no background update checks, so the running app remains fully local and network free.
+
 ## Use
 
 1. Copy text in any app.
 2. Click the infinity icon in the menu bar.
 3. Choose an intensity from 0 through 10.
 4. Press Rewrite.
-5. Keep the popover open and the finished rewrite is copied automatically.
+5. The finished rewrite is copied automatically, then the popover closes.
 
-The slider becomes a minimal progress rail while RewriteBar works. When the rewrite is copied, the button briefly confirms Copied with a checkmark. If you close the popover before processing finishes, the result waits safely as Copy Rewrite the next time you open it. A subtle curved arrow lets you restore the previous clipboard entry until you copy something else.
+The slider becomes a minimal progress rail while RewriteBar works. Preparation occupies only the beginning of the rail. Once generation starts, progress follows the text actually produced by the model. When the rewrite is copied, the button briefly confirms Copied to Clipboard with a checkmark. A subtle curved arrow lets you restore the previous clipboard entry until you copy something else.
 
 The slider controls how much RewriteBar changes:
 
@@ -99,14 +109,16 @@ API latency went from 180 ms to 640 ms between 09:10 and 09:35 UTC only in eu we
 
 * `RewriteCore` handles validation, prompt construction, and safe output cleanup.
 * `LocalModelService` loads the bundled model, generates text, and supports cancellation.
-* `RewriteViewModel` owns rewrite, progress, automatic copy, pending copy, undo, and failure states.
-* SwiftUI provides the compact `MenuBarExtra`, keyboard access, VoiceOver labels, and light and dark materials.
+* `RewriteViewModel` owns rewrite, progress, automatic copy, restore, and failure states.
+* AppKit owns the persistent menu bar item and popover lifecycle. SwiftUI provides the compact content, keyboard access, VoiceOver labels, and adaptive materials.
 
-Inputs longer than 20,000 visible characters are rejected to keep latency and memory predictable. Generation is deterministic, bounded, and configured with thinking disabled.
+RewriteBar is designed for messages, emails, and short passages. Inputs longer than 2,000 visible characters are rejected immediately so the menu bar interaction stays responsive and predictable. Accepted generation is deterministic, bounded to 18 seconds, and configured with thinking disabled.
 
 ## Contribute
 
-Bug reports, feature ideas, and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before making a change. Use [GitHub Issues](https://github.com/Nexus-Global-Partners/RewriteBar/issues) for actionable reports and [GitHub Discussions](https://github.com/Nexus-Global-Partners/RewriteBar/discussions) for questions and ideas.
+Bug reports, feature ideas, and pull requests are welcome. Read [AGENTS.md](AGENTS.md) for the product contract and [CONTRIBUTING.md](CONTRIBUTING.md) for the shortest path to a useful pull request. Use [GitHub Issues](https://github.com/Nexus-Global-Partners/RewriteBar/issues) for actionable reports and [GitHub Discussions](https://github.com/Nexus-Global-Partners/RewriteBar/discussions) for questions and early ideas.
+
+Maintainers can follow [RELEASING.md](RELEASING.md) to validate, tag, publish, and verify an update with one guarded command.
 
 Please report security concerns using the private process in [SECURITY.md](SECURITY.md).
 

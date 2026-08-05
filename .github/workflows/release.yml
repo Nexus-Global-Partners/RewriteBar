@@ -20,7 +20,7 @@ jobs:
           version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Configuration/Info.plist)
           test "$GITHUB_REF_NAME" = "v$version"
       - name: Run checks
-        run: swift run RewriteCoreChecks
+        run: ./Scripts/check-project.sh
       - name: Download verified model
         run: ./Scripts/download-model.sh
       - name: Package app

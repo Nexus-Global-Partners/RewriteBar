@@ -14,6 +14,8 @@ enum RewriteCoreChecks {
         try checkMaximumLength()
         try checkClipboardTextNormalization()
         try checkPromptConstruction()
+        try checkProductWorkloadBoundary()
+        try checkRewriteProgressPolicy()
         try checkPreparationPolicy()
         try checkSourceInstructionProtection()
         try checkGenerationBudget()
@@ -21,6 +23,8 @@ enum RewriteCoreChecks {
         try checkOfficeFillerCleanup()
         try checkOutputCleanup()
         try checkEmptyOutput()
+        try checkPopoverActionRouting()
+        try checkPopoverVisibilityTracking()
         print("All RewriteCore checks passed.")
     }
 
@@ -38,6 +42,64 @@ enum RewriteCoreChecks {
         } catch {
             return error as? RewriteError
         }
+    }
+
+    private static func checkPopoverActionRouting() throws {
+        try require(
+            !PopoverActionRouter.shouldClosePopover(
+                after: .restore,
+                succeeded: true
+            ),
+            "Restoring the previous clipboard text should keep the popover open."
+        )
+        try require(
+            PopoverActionRouter.shouldClosePopover(
+                after: .primary,
+                succeeded: true
+            ),
+            "A successful primary completion should close the popover."
+        )
+        try require(
+            !PopoverActionRouter.shouldClosePopover(
+                after: .primary,
+                succeeded: false
+            ),
+            "A failed action should keep the popover open."
+        )
+        try require(
+            PopoverActionRouter.shouldClosePopover(
+                after: .automaticRewrite,
+                succeeded: true
+            ),
+            "Automatic rewrite should release the popover after confirmation."
+        )
+        try require(
+            PopoverActionRouter.shouldClosePopover(
+                after: .automaticRecovery,
+                succeeded: true
+            ),
+            "Automatic recovery should release the popover after confirmation."
+        )
+    }
+
+    private static func checkPopoverVisibilityTracking() throws {
+        var tracker = PopoverVisibilityTracker()
+        try require(
+            !tracker.isVisible,
+            "A popover should start hidden."
+        )
+
+        tracker.opened()
+        try require(
+            tracker.isVisible,
+            "A shown popover must be tracked as visible."
+        )
+
+        tracker.closed()
+        try require(
+            !tracker.isVisible,
+            "A closed popover must be tracked as hidden."
+        )
     }
 
     private static func checkValidationPreservesFormatting() throws {
@@ -171,20 +233,77 @@ enum RewriteCoreChecks {
         try require(
             RewritePromptBuilder.maximumOutputTokens(
                 for: String(repeating: "a", count: 20_000)
-            ) == 6_000,
+            ) == 2_048,
             "Long output budget is not capped."
+        )
+    }
+
+    private static func checkProductWorkloadBoundary() throws {
+        try require(
+            AppConstants.maximumInputCharacters == 2_000,
+            "RewriteBar should reject document sized input before generation starts."
+        )
+        try require(
+            capturedError {
+                _ = try InputValidator.validate(
+                    plainText: String(repeating: "a", count: 2_001),
+                    clipboardContainsItems: true
+                )
+            } == .textTooLong(maximum: 2_000),
+            "Text beyond the product boundary should fail immediately."
+        )
+    }
+
+    private static func checkRewriteProgressPolicy() throws {
+        let initial = RewriteProgressPolicy.preparationProgress(
+            elapsedSeconds: 0,
+            sourceCharacterCount: 2_000
+        )
+        let prepared = RewriteProgressPolicy.preparationProgress(
+            elapsedSeconds: 10,
+            sourceCharacterCount: 2_000
+        )
+        let started = RewriteProgressPolicy.generationProgress(
+            generatedCharacterCount: 0,
+            sourceCharacterCount: 2_000
+        )
+        let halfway = RewriteProgressPolicy.generationProgress(
+            generatedCharacterCount: 900,
+            sourceCharacterCount: 2_000
+        )
+        let generated = RewriteProgressPolicy.generationProgress(
+            generatedCharacterCount: 1_800,
+            sourceCharacterCount: 2_000
+        )
+
+        try require(initial == 0, "Progress must begin at zero.")
+        try require(
+            prepared == RewriteProgressPolicy.preparationCeiling,
+            "Preparation progress should stop at its honest ceiling."
+        )
+        try require(
+            started == RewriteProgressPolicy.preparationCeiling,
+            "Generation should continue from preparation progress."
+        )
+        try require(
+            halfway > started && halfway < generated,
+            "Generation progress should follow generated text."
+        )
+        try require(
+            generated == RewriteProgressPolicy.generationCeiling,
+            "Generation progress should retain room for final validation."
         )
     }
 
     private static func checkPreparationPolicy() throws {
         try require(
-            PreparationPolicy.timeoutSeconds(forCharacterCount: 20) == 20,
+            PreparationPolicy.timeoutSeconds(forCharacterCount: 20) == 12,
             "Short text should use the minimum rewrite timeout."
         )
-        let longTimeout = PreparationPolicy.timeoutSeconds(forCharacterCount: 20_000)
+        let longTimeout = PreparationPolicy.timeoutSeconds(forCharacterCount: 2_000)
         try require(
-            longTimeout > 20 && longTimeout <= 90,
-            "Long text should receive a bounded scaled timeout."
+            longTimeout > 12 && longTimeout <= 18,
+            "Accepted text should receive a tightly bounded timeout."
         )
     }
 

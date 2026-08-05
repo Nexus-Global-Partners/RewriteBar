@@ -12,6 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let viewModel = RewriteViewModel()
     private let popover = NSPopover()
     private var statusItem: NSStatusItem?
+    private var previouslyActiveApplication: NSRunningApplication?
+    private var restoresFocusAfterClose = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -22,12 +24,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func popoverDidClose(_ notification: Notification) {
         viewModel.popoverClosed()
+
+        let applicationToRestore = restoresFocusAfterClose
+            ? previouslyActiveApplication
+            : nil
+        restoresFocusAfterClose = false
+        previouslyActiveApplication = nil
+
+        if let applicationToRestore {
+            NSApp.yieldActivation(to: applicationToRestore)
+            _ = applicationToRestore.activate(
+                from: .current,
+                options: []
+            )
+        }
+    }
+
+    func popoverWillShow(_ notification: Notification) {
+        viewModel.popoverOpened()
     }
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
         if popover.isShown {
             popover.performClose(sender)
         } else {
+            rememberActiveApplication()
             popover.show(
                 relativeTo: sender.bounds,
                 of: sender,
@@ -45,10 +66,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             rootView: PopoverView(
                 viewModel: viewModel,
                 close: { [weak self] in
-                    self?.popover.performClose(nil)
+                    self?.closeAfterCompletion()
                 }
             )
         )
+    }
+
+    private func rememberActiveApplication() {
+        guard let activeApplication = NSWorkspace.shared.frontmostApplication,
+              activeApplication.processIdentifier
+                != ProcessInfo.processInfo.processIdentifier else {
+            previouslyActiveApplication = nil
+            return
+        }
+
+        previouslyActiveApplication = activeApplication
+    }
+
+    private func closeAfterCompletion() {
+        guard popover.isShown else { return }
+        restoresFocusAfterClose = true
+        popover.performClose(nil)
     }
 
     private func configureStatusItem() {

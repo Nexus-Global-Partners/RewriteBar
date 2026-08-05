@@ -112,7 +112,11 @@ actor LocalModelService {
         }
     }
 
-    func rewrite(text: String, intensity: Int) async throws -> String {
+    func rewrite(
+        text: String,
+        intensity: Int,
+        onProgress: (@Sendable (Int) async -> Void)? = nil
+    ) async throws -> String {
         try await prepareModel()
         return try await generate(
             text: text,
@@ -124,13 +128,15 @@ actor LocalModelService {
                     protectedTokens: protectedSource.placeholderTokens
                 )
             },
+            onProgress: onProgress
         )
     }
 
     private func generate(
         text: String,
         systemPrompt: String,
-        makeUserPrompt: (ProtectedSource) -> String
+        makeUserPrompt: (ProtectedSource) -> String,
+        onProgress: (@Sendable (Int) async -> Void)?
     ) async throws -> String {
         guard let modelContainer else {
             throw RewriteError.modelUnavailable
@@ -160,11 +166,35 @@ actor LocalModelService {
             )
 
             var output = ""
+            var generatedCharacterCount = 0
+            var lastReportedCharacterCount = 0
+            var lastProgressUpdate = Date.distantPast
+            var reachedTokenLimit = false
             for await event in stream {
                 try Task.checkCancellation()
-                if case .chunk(let chunk) = event {
+                switch event {
+                case .chunk(let chunk):
                     output.append(chunk)
+                    generatedCharacterCount += chunk.count
+                    let now = Date()
+                    if generatedCharacterCount - lastReportedCharacterCount >= 24,
+                       now.timeIntervalSince(lastProgressUpdate) >= 0.08 {
+                        lastReportedCharacterCount = generatedCharacterCount
+                        lastProgressUpdate = now
+                        await onProgress?(generatedCharacterCount)
+                    }
+                case .info(let info):
+                    if case .length = info.stopReason {
+                        reachedTokenLimit = true
+                    }
+                case .toolCall:
+                    break
                 }
+            }
+
+            await onProgress?(generatedCharacterCount)
+            guard !reachedTokenLimit else {
+                throw RewriteError.generationFailed
             }
 
             Memory.clearCache()

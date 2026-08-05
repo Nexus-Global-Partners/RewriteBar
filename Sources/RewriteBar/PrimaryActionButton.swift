@@ -26,16 +26,30 @@ struct PrimaryActionButton: View {
 
     private var button: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            ZStack {
                 if isWorking {
-                    LoadingIndicator()
-                } else {
-                    Image(systemName: symbol)
-                }
+                    HStack(spacing: 8) {
+                        LoadingIndicator()
 
-                Text(title)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.84)
+                        Text("Rewriting")
+                    }
+
+                    HStack {
+                        Spacer()
+
+                        Text("Cancel")
+                            .foregroundStyle(AppPalette.deepGraphite.opacity(0.36))
+                            .padding(.trailing, 16)
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        Image(systemName: symbol)
+
+                        Text(title)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.84)
+                    }
+                }
             }
             .font(.system(size: 13, weight: .semibold, design: .rounded))
             .foregroundStyle(foregroundColor)
