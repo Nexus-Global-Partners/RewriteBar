@@ -13,9 +13,40 @@ archive="$download_root/RewriteBar.zip"
 checksum_file="$download_root/RewriteBar.zip.sha256"
 expanded="$download_root/expanded"
 
+download() {
+    local url=$1
+    local output=$2
+    local attempt=1
+    local maximum_attempts=10
+
+    while (( attempt <= maximum_attempts )); do
+        if curl \
+            --fail \
+            --location \
+            --progress-bar \
+            --connect-timeout 30 \
+            --speed-limit 1024 \
+            --speed-time 30 \
+            --continue-at - \
+            "$url" \
+            --output "$output"; then
+            return 0
+        fi
+
+        if (( attempt < maximum_attempts )); then
+            print -u2 "Download interrupted. Resuming in 2 seconds."
+            sleep 2
+        fi
+        (( attempt++ ))
+    done
+
+    print -u2 "Could not download RewriteBar after $maximum_attempts attempts."
+    return 1
+}
+
 print "Downloading RewriteBar"
-curl --fail --location --retry 3 "$release_url" --output "$archive"
-curl --fail --location --retry 3 "$checksum_url" --output "$checksum_file"
+download "$release_url" "$archive"
+download "$checksum_url" "$checksum_file"
 
 expected_checksum=$(awk '{print $1}' "$checksum_file")
 actual_checksum=$(shasum -a 256 "$archive" | awk '{print $1}')
