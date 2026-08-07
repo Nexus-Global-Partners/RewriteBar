@@ -68,6 +68,58 @@ public enum OutputStyleGuard {
         }
     }
 
+    public static func replacingOfficeFiller(
+        in output: String,
+        source: String,
+        intensity: Int
+    ) -> String {
+        guard RewriteIntensityPolicy.clampedLevel(intensity) > 0 else {
+            return output
+        }
+        return replacingOfficeFiller(in: output, source: source)
+    }
+
+    public static func restoringUncertaintyStrength(
+        in output: String,
+        source: String
+    ) -> String {
+        let protectedPhrases = [
+            "not totally sure",
+            "not entirely sure",
+            "not completely sure"
+        ]
+        let weakerAlternatives = [
+            "not sure",
+            "unsure"
+        ]
+        var result = output
+
+        for protectedPhrase in protectedPhrases {
+            guard let sourceRange = source.range(
+                of: protectedPhrase,
+                options: .caseInsensitive
+            ), result.range(
+                of: protectedPhrase,
+                options: .caseInsensitive
+            ) == nil else {
+                continue
+            }
+
+            let exactSourcePhrase = String(source[sourceRange])
+            for alternative in weakerAlternatives {
+                guard let outputRange = result.range(
+                    of: alternative,
+                    options: .caseInsensitive
+                ) else {
+                    continue
+                }
+                result.replaceSubrange(outputRange, with: exactSourcePhrase)
+                break
+            }
+        }
+        return result
+    }
+
     private static func sourceContainsQuotedOccurrence(
         of phrase: String,
         source: String

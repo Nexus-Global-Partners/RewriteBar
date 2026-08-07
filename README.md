@@ -4,7 +4,7 @@
 
 <h1 align="center">RewriteBar</h1>
 
-<p align="center">A private, native macOS menu bar app that rewrites clipboard text with a local model.</p>
+<p align="center">A private, native macOS writing tool that rewrites from the menu bar or directly from your keyboard.</p>
 
 <p align="center">
   <img src="BrandAssets/rewritebar-menu-bar.png" width="800" alt="RewriteBar open from the macOS menu bar with its rewrite intensity slider">
@@ -22,7 +22,20 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-black" alt="MIT License"></a>
 </p>
 
-RewriteBar reads plain text from the clipboard only when you press Rewrite. Everything runs on your Mac through MLX. There is no account, API key, server, telemetry, or analytics.
+RewriteBar gives you two focused paths. Rewrite clipboard text from its compact menu bar control, or select editable text in another app and use a keyboard shortcut. Everything runs on your Mac through MLX. There is no account, API key, server, telemetry, analytics, or runtime network access.
+
+## Product idea
+
+RewriteBar explores a different approach to writing software. The tool should meet you where you already write instead of pulling you into another editor, tab, or conversation.
+
+The model is local, open, offline, and specialized around one task. The interface stays deliberately small. Personalization exists, but it lives behind a native Settings window rather than inside the main interaction.
+
+Extreme minimalism here does not mean removing useful capability. It means reducing the distance between intent and result:
+
+1. Select or copy the text.
+2. Choose how strongly it may change.
+3. Rewrite once.
+4. Continue writing.
 
 ## Install
 
@@ -48,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/Nexus-Global-Partners/RewriteBar/ma
 
 It replaces the existing copy in `~/Applications`, verifies the signature, and opens the current release. RewriteBar performs no background update checks, so the running app remains fully local and network free.
 
-## Use
+## Use from the menu bar
 
 1. Copy text in any app.
 2. Click the infinity icon in the menu bar.
@@ -58,16 +71,51 @@ It replaces the existing copy in `~/Applications`, verifies the signature, and o
 
 The slider becomes a minimal progress rail while RewriteBar works. Preparation occupies only the beginning of the rail. Once generation starts, progress follows the text actually produced by the model. When the rewrite is copied, the button briefly confirms Copied to Clipboard with a checkmark. A subtle curved arrow lets you restore the previous clipboard entry until you copy something else.
 
-The slider controls how much RewriteBar changes:
+The slider controls how much RewriteBar changes. Each number has a defined contract:
 
-* 0 preserves the original almost exactly and fixes clear mistakes.
-* 3 is the default for a light, natural cleanup.
-* 5 improves structure and clarity while preserving the writer's voice.
-* 10 allows the strongest restructuring without changing facts or intent.
+* 0 only fixes obvious spelling, grammar, and punctuation errors.
+* 1 makes essential corrections and very small clarity changes.
+* 2 lightly improves grammar, flow, and readability.
+* 3 gently rewrites awkward sentences without changing tone or meaning.
+* 4 moderately rewrites unclear or repetitive parts.
+* 5 freely improves wording, flow, and organization while preserving the message.
+* 6 noticeably restructures sentences and paragraphs where useful.
+* 7 substantially reworks most of the text while preserving intent.
+* 8 uses significant freedom in wording, tone, and structure.
+* 9 rebuilds the text almost entirely from its essential message and details.
+* 10 creates the strongest new version of the same idea with maximum structural freedom.
+
+## Rewrite selected text
+
+The default shortcut is `Control Option R`.
+
+1. Right click the infinity icon and open Settings.
+2. Allow RewriteBar in macOS Accessibility settings.
+3. Choose the shortcut intensity, writing style, and keyboard shortcut you prefer.
+4. Select editable text in another app.
+5. Press the shortcut.
+
+The infinity icon becomes a small progress indicator while the local model works. A checkmark confirms that the selection was rewritten and the result was copied. If the focused field or selection changes before completion, RewriteBar leaves the text untouched and keeps a successfully generated result on the clipboard.
+
+The direct replacement path works in applications that expose a writable text selection through macOS Accessibility. Unsupported custom editors fail safely without simulating copy and paste or changing another field.
+
+## Settings
+
+Right click the infinity icon and choose Settings. You can configure:
+
+* Shortcut intensity, with level 3 as the initial default
+* RewriteBar, Clear, Professional, Conversational, or Persuasive writing style
+* Any available keyboard shortcut using Command, Control, or Option
+* Optional custom writing instructions
+* macOS Accessibility permission for selected text replacement
+
+Every style and custom preference remains subordinate to the source. RewriteBar must preserve truth, meaning, intent, uncertainty, language, important details, approximate length, tone of voice, and the recognizable style of the original writer. It rejects artificial filler, corporate language, and dash characters.
 
 ## Privacy
 
-The Qwen3 1.7B model is bundled inside each release and runs in process with MLX. Clipboard text is never sent over the network, displayed in the app, logged, or saved. RewriteBar stores only the selected intensity.
+The Qwen3 1.7B model is bundled inside each release and runs in process with MLX. Clipboard and selected text are never sent over the network, displayed in the app, logged, or saved. RewriteBar stores only local preferences: the last menu intensity, shortcut intensity, writing style, shortcut, and optional custom instructions.
+
+Accessibility access is used only when the configured shortcut asks RewriteBar to read and replace the current editable selection. Secure text fields are refused. Before replacement, RewriteBar verifies that the application, focused element, selected range, and selected text are still the same.
 
 ## Build from source
 
@@ -111,12 +159,15 @@ API latency went from 180 ms to 640 ms between 09:10 and 09:35 UTC only in eu we
 
 ## Architecture
 
-* `RewriteCore` handles validation, prompt construction, and safe output cleanup.
+* `RewriteCore` handles validation, all eleven intensity contracts, writing styles, prompt construction, and safe output cleanup.
 * `LocalModelService` loads the bundled model, generates text, and supports cancellation.
 * `RewriteViewModel` owns rewrite, progress, automatic copy, restore, and failure states.
-* AppKit owns the persistent menu bar item and popover lifecycle. SwiftUI provides the compact content, keyboard access, VoiceOver labels, and adaptive materials.
+* `SelectedTextRewriteCoordinator` owns the shortcut rewrite lifecycle and safe replacement.
+* `AccessibilitySelectionClient` captures and verifies editable selections without simulated keyboard input.
+* `RewriteSettingsStore` keeps preferences local and `SettingsView` provides the native settings experience.
+* AppKit owns the persistent menu bar item, global shortcut, status feedback, and popover lifecycle. SwiftUI provides the compact content, VoiceOver labels, and adaptive materials.
 
-RewriteBar is designed for messages, emails, and short passages. Inputs longer than 2,000 visible characters are rejected immediately so the menu bar interaction stays responsive and predictable. Accepted generation is deterministic, bounded to 18 seconds, and configured with thinking disabled.
+RewriteBar is designed for messages, emails, and short passages. Inputs longer than 2,000 visible characters are rejected immediately so both interactions stay responsive and predictable. Accepted generation is deterministic, bounded to 18 seconds, and configured with thinking disabled.
 
 ## Contribute
 

@@ -15,7 +15,11 @@ actor LocalModelService {
     private var modelContainer: ModelContainer?
     private var modelPreparationTask: Task<ModelContainer, Error>?
     private var isGenerationActive = false
-    private var generationWaiters: [CheckedContinuation<Void, Never>] = []
+    private struct GenerationWaiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Void, Error>
+    }
+    private var generationWaiters: [GenerationWaiter] = []
     private var isWarmedUp = false
 
     init() {
@@ -44,7 +48,7 @@ actor LocalModelService {
                 additionalContext: ["enable_thinking": false]
             )
 
-            await acquireGenerationSlot()
+            try await acquireGenerationSlot()
             defer { releaseGenerationSlot() }
             try Task.checkCancellation()
 
@@ -115,16 +119,21 @@ actor LocalModelService {
     func rewrite(
         text: String,
         intensity: Int,
+        writingStyle: RewriteStyle = .rewriteBar,
+        customInstructions: String? = nil,
         onProgress: (@Sendable (Int) async -> Void)? = nil
     ) async throws -> String {
         try await prepareModel()
         return try await generate(
             text: text,
+            intensity: intensity,
             systemPrompt: RewritePromptBuilder.systemPrompt,
             makeUserPrompt: { protectedSource in
                 RewritePromptBuilder.userPrompt(
                     text: protectedSource.text,
                     intensity: intensity,
+                    writingStyle: writingStyle,
+                    customInstructions: customInstructions,
                     protectedTokens: protectedSource.placeholderTokens
                 )
             },
@@ -134,6 +143,7 @@ actor LocalModelService {
 
     private func generate(
         text: String,
+        intensity: Int,
         systemPrompt: String,
         makeUserPrompt: (ProtectedSource) -> String,
         onProgress: (@Sendable (Int) async -> Void)?
@@ -152,7 +162,7 @@ actor LocalModelService {
             additionalContext: ["enable_thinking": false]
         )
 
-        await acquireGenerationSlot()
+        try await acquireGenerationSlot()
         defer { releaseGenerationSlot() }
 
         do {
@@ -205,8 +215,13 @@ actor LocalModelService {
                 from: sanitized,
                 source: text
             )
-            return OutputStyleGuard.replacingOfficeFiller(
+            let withoutOfficeFiller = OutputStyleGuard.replacingOfficeFiller(
                 in: withoutFraming,
+                source: text,
+                intensity: intensity
+            )
+            return OutputStyleGuard.restoringUncertaintyStrength(
+                in: withoutOfficeFiller,
                 source: text
             )
         } catch is CancellationError {
@@ -232,15 +247,32 @@ actor LocalModelService {
         )
     }
 
-    private func acquireGenerationSlot() async {
+    private func acquireGenerationSlot() async throws {
+        try Task.checkCancellation()
         if !isGenerationActive {
             isGenerationActive = true
             return
         }
 
-        await withCheckedContinuation { continuation in
-            generationWaiters.append(continuation)
+        let waiterID = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation {
+                (continuation: CheckedContinuation<Void, Error>) in
+                guard !Task.isCancelled else {
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                generationWaiters.append(
+                    GenerationWaiter(
+                        id: waiterID,
+                        continuation: continuation
+                    )
+                )
+            }
+        } onCancel: {
+            Task { await self.cancelGenerationWaiter(waiterID) }
         }
+        try Task.checkCancellation()
     }
 
     private func releaseGenerationSlot() {
@@ -249,6 +281,14 @@ actor LocalModelService {
             return
         }
 
-        generationWaiters.removeFirst().resume()
+        generationWaiters.removeFirst().continuation.resume()
+    }
+
+    private func cancelGenerationWaiter(_ waiterID: UUID) {
+        guard let index = generationWaiters.firstIndex(where: { $0.id == waiterID }) else {
+            return
+        }
+        let waiter = generationWaiters.remove(at: index)
+        waiter.continuation.resume(throwing: CancellationError())
     }
 }

@@ -4,7 +4,7 @@ Thanks for helping improve RewriteBar.
 
 ## Before you start
 
-Read [AGENTS.md](AGENTS.md), then search existing Issues and Discussions. Open an issue before a new control, workflow, model, dependency, or architecture change so product direction is agreed before implementation.
+Read [AGENTS.md](AGENTS.md), then search existing Issues and Discussions. Open an issue before a new control, workflow, writing style, model, dependency, permission, or architecture change so product direction is agreed before implementation.
 
 Small bug fixes, accessibility improvements, tests, and documentation corrections can go directly to a focused pull request.
 
@@ -36,6 +36,15 @@ codesign --verify --deep --strict dist/RewriteBar.app
 
 Open the built app and test the complete menu bar flow with invented text. Check levels 0, 3, 5, and 10 when prompt or generation behavior changes. Never paste private clipboard content into an issue, test, log, screenshot, or pull request.
 
+Shortcut and Accessibility changes also require manual checks in several host applications:
+
+1. Confirm the shortcut registers and updates after recording a new combination.
+2. Confirm permission is requested only when needed.
+3. Rewrite a selection in a native text field and verify the result is also copied.
+4. Move focus or change the selection during generation and verify the original text is not replaced.
+5. Verify secure fields and unsupported editors fail without reading, replacing, or pasting text.
+6. Confirm the menu bar path still works without Accessibility permission.
+
 ## Open the pull request
 
 The pull request should state:
@@ -53,4 +62,4 @@ Never commit model weights, app bundles, release archives, benchmark output, cli
 
 ## Product principles
 
-RewriteBar should remain local, private, fast, focused, accessible, and visually restrained. New controls must justify their permanent cost in a tiny menu bar interface. Preserve the single slider and single action flow unless an issue explicitly agrees to change it.
+RewriteBar should remain local, private, fast, focused, accessible, and visually restrained. New controls must justify their permanent cost in a tiny menu bar interface. Preserve the single slider and single action flow. Put durable personalization in the native Settings window, not in the popover, unless an issue explicitly changes that product direction.

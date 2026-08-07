@@ -39,7 +39,19 @@ private struct BenchmarkReport: Codable {
     let averageScore: Double
     let averageDurationSeconds: Double
     let checkPassRates: [String: Double]
+    let intensityContrastPassRate: Double?
+    let intensityContrasts: [IntensityContrastResult]
     let results: [TrialResult]
+}
+
+private struct IntensityContrastResult: Codable {
+    let caseID: String
+    let lowerIntensity: Int
+    let upperIntensity: Int
+    let lowerChangeRatio: Double
+    let upperChangeRatio: Double
+    let outputDifferenceRatio: Double
+    let passed: Bool
 }
 
 @main
@@ -101,18 +113,21 @@ private enum RewriteBenchmark {
         } else if CommandLine.arguments.count == 5 {
             throw BenchmarkError("Intensity must be an integer from 0 through 10.")
         } else {
-            intensities = Array(1...10)
+            intensities = Array(0...10)
         }
 
         for testCase in cases {
             for intensity in intensities {
-                let start = Date()
+                let clock = ContinuousClock()
+                let start = clock.now
                 let output = try await rewrite(
                     testCase.input,
                     intensity: intensity,
                     container: container
                 )
-                let duration = Date().timeIntervalSince(start)
+                let elapsed = start.duration(to: clock.now).components
+                let duration = Double(elapsed.seconds)
+                    + Double(elapsed.attoseconds) / 1_000_000_000_000_000_000
                 let checks = evaluate(
                     output: output,
                     testCase: testCase,
@@ -159,6 +174,11 @@ private enum RewriteBenchmark {
         } / Double(results.count)
         let averageDuration = results.reduce(0.0) { $0 + $1.durationSeconds }
             / Double(results.count)
+        let intensityContrasts = evaluateIntensityContrasts(results)
+        let intensityContrastPassRate = intensityContrasts.isEmpty
+            ? nil
+            : Double(intensityContrasts.filter(\.passed).count)
+                / Double(intensityContrasts.count)
 
         let report = BenchmarkReport(
             generatedAt: ISO8601DateFormatter().string(from: Date()),
@@ -167,6 +187,8 @@ private enum RewriteBenchmark {
             averageScore: averageScore,
             averageDurationSeconds: averageDuration,
             checkPassRates: passRates,
+            intensityContrastPassRate: intensityContrastPassRate,
+            intensityContrasts: intensityContrasts,
             results: results
         )
         let encoder = JSONEncoder()
@@ -236,8 +258,13 @@ private enum RewriteBenchmark {
             from: sanitized,
             source: text
         )
-        return OutputStyleGuard.replacingOfficeFiller(
+        let withoutOfficeFiller = OutputStyleGuard.replacingOfficeFiller(
             in: withoutFraming,
+            source: text,
+            intensity: intensity
+        )
+        return OutputStyleGuard.restoringUncertaintyStrength(
+            in: withoutOfficeFiller,
             source: text
         )
     }
@@ -264,8 +291,22 @@ private enum RewriteBenchmark {
         let lowered = output.lowercased()
         let inputLength = max(1, testCase.input.count)
         let lengthRatio = Double(output.count) / Double(inputLength)
-        let minimumRatio = intensity <= 3 ? 0.60 : 0.34
-        let maximumRatio = intensity <= 3 ? 1.45 : 1.70
+        let minimumRatio = 0.72
+        let maximumRatio = 1.38
+        let changeRatio = wordEditRatio(from: testCase.input, to: output)
+        let strongChangeFloor: Double
+        switch intensity {
+        case 10:
+            strongChangeFloor = 0.20
+        case 9:
+            strongChangeFloor = 0.17
+        case 8:
+            strongChangeFloor = 0.14
+        case 7:
+            strongChangeFloor = 0.10
+        default:
+            strongChangeFloor = 0
+        }
         let forbiddenDashScalars = CharacterSet(
             charactersIn: "-‐‑‒–—―−"
         )
@@ -294,16 +335,103 @@ private enum RewriteBenchmark {
         return [
             "dash_free": dashFree,
             "forbidden_claims_absent": forbiddenClaimsAbsent,
-            "human_style_terms_absent": artificialPhrases.allSatisfy { !lowered.contains($0) },
+            "human_style_terms_absent": intensity == 0
+                || artificialPhrases.allSatisfy { !lowered.contains($0) },
             "language_preserved": languageLooksCorrect(output, language: testCase.language),
             "length_controlled": lengthRatio >= minimumRatio && lengthRatio <= maximumRatio,
             "natural_punctuation": output.count < 120 || output.filter { ".?!".contains($0) }.count >= 2,
             "no_preamble": preambles.allSatisfy { !lowered.hasPrefix($0) },
             "paragraphs_preserved": paragraphsPreserved,
             "required_facts_preserved": requiredFactsPreserved,
+            "level_zero_restrained": intensity != 0 || changeRatio <= 0.12,
+            "light_edit_restrained": intensity > 2 || changeRatio <= 0.35,
             "structure_preserved": !testCase.expectsBullets || output.contains("•"),
-            "substantial_when_requested": intensity < 7 || normalized(output) != normalized(testCase.input)
+            "substantial_when_requested": intensity < 7 || changeRatio >= strongChangeFloor
         ]
+    }
+
+    private static func wordEditRatio(from source: String, to output: String) -> Double {
+        let sourceWords = words(in: source)
+        let outputWords = words(in: output)
+        let denominator = max(1, max(sourceWords.count, outputWords.count))
+        var previous = Array(0...outputWords.count)
+
+        for (sourceIndex, sourceWord) in sourceWords.enumerated() {
+            var current = Array(repeating: 0, count: outputWords.count + 1)
+            current[0] = sourceIndex + 1
+            for (outputIndex, outputWord) in outputWords.enumerated() {
+                let replacementCost = sourceWord == outputWord ? 0 : 1
+                current[outputIndex + 1] = min(
+                    previous[outputIndex + 1] + 1,
+                    current[outputIndex] + 1,
+                    previous[outputIndex] + replacementCost
+                )
+            }
+            previous = current
+        }
+
+        return Double(previous[outputWords.count]) / Double(denominator)
+    }
+
+    private static func evaluateIntensityContrasts(
+        _ results: [TrialResult]
+    ) -> [IntensityContrastResult] {
+        let requestedPairs: [(lower: Int, upper: Int, requiredIncrease: Double)] = [
+            (0, 3, 0.03),
+            (2, 5, 0.05),
+            (5, 8, 0.05),
+            (2, 10, 0.20)
+        ]
+        let grouped = Dictionary(grouping: results, by: \.caseID)
+        var contrasts: [IntensityContrastResult] = []
+
+        for caseID in grouped.keys.sorted() {
+            guard let trials = grouped[caseID] else { continue }
+            let byIntensity = Dictionary(
+                uniqueKeysWithValues: trials.map { ($0.intensity, $0) }
+            )
+
+            for pair in requestedPairs {
+                guard let lower = byIntensity[pair.lower],
+                      let upper = byIntensity[pair.upper] else {
+                    continue
+                }
+
+                let lowerChange = wordEditRatio(
+                    from: lower.input,
+                    to: lower.output
+                )
+                let upperChange = wordEditRatio(
+                    from: upper.input,
+                    to: upper.output
+                )
+                let outputDifference = wordEditRatio(
+                    from: lower.output,
+                    to: upper.output
+                )
+                let passed = upperChange >= lowerChange + pair.requiredIncrease
+                    && outputDifference >= pair.requiredIncrease
+
+                contrasts.append(
+                    IntensityContrastResult(
+                        caseID: caseID,
+                        lowerIntensity: pair.lower,
+                        upperIntensity: pair.upper,
+                        lowerChangeRatio: lowerChange,
+                        upperChangeRatio: upperChange,
+                        outputDifferenceRatio: outputDifference,
+                        passed: passed
+                    )
+                )
+            }
+        }
+        return contrasts
+    }
+
+    private static func words(in value: String) -> [String] {
+        value.lowercased()
+            .split { !$0.isLetter && !$0.isNumber }
+            .map(String.init)
     }
 
     private static func languageLooksCorrect(

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.0
+
+* Gives every intensity from 0 through 10 an explicit rewrite contract, from strict proofreading to full transformation.
+* Adds five faithful writing styles: RewriteBar, Clear, Professional, Conversational, and Persuasive.
+* Adds a configurable global shortcut that rewrites selected editable text and copies the result without leaving the current app.
+* Adds a native Settings window for shortcut intensity, writing style, keyboard shortcut, Accessibility access, and optional custom instructions.
+* Shows rewrite progress and completion directly in the menu bar during shortcut use.
+* Preserves the original selection if focus or content changes while the local model is working.
+* Adds direct intensity contrast measurements to the model benchmark.
+* Documents RewriteBar as an experiment in focused, local software that augments existing keyboard workflows.
+
 ## 1.2.7
 
 * Makes rewrite progress follow text actually generated instead of appearing stuck near completion.

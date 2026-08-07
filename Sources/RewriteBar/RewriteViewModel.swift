@@ -27,6 +27,7 @@ final class RewriteViewModel: ObservableObject {
 
     private let clipboard = ClipboardService()
     private let modelService: LocalModelService
+    private let settings: RewriteSettingsStore
     private var sourceText: String?
     private var preparedOutput: String?
     private var previousClipboardText: String?
@@ -37,8 +38,12 @@ final class RewriteViewModel: ObservableObject {
     private var generationID = UUID()
     private var popoverVisibility = PopoverVisibilityTracker()
 
-    init(modelService: LocalModelService = .shared) {
+    init(
+        modelService: LocalModelService = .shared,
+        settings: RewriteSettingsStore = .shared
+    ) {
         self.modelService = modelService
+        self.settings = settings
         let stored = UserDefaults.standard.object(forKey: Self.intensityKey) as? Int
             ?? Self.defaultIntensity
         intensity = Double(min(10, max(0, stored)))
@@ -187,6 +192,10 @@ final class RewriteViewModel: ObservableObject {
         let requestID = UUID()
         generationID = requestID
         let rewriteIntensity = Int(intensity.rounded())
+        let writingStyle = settings.writingStyle
+        let customInstructions = settings.customInstructionsEnabled
+            ? settings.customInstructions
+            : nil
 
         sourceText = text
         preparedOutput = nil
@@ -209,6 +218,8 @@ final class RewriteViewModel: ObservableObject {
                 let output = try await rewrite(
                     text: text,
                     intensity: rewriteIntensity,
+                    writingStyle: writingStyle,
+                    customInstructions: customInstructions,
                     modelService: modelService,
                     onProgress: { [weak self] generatedCharacterCount in
                         await self?.updateGenerationProgress(
@@ -247,6 +258,8 @@ final class RewriteViewModel: ObservableObject {
     private func rewrite(
         text: String,
         intensity: Int,
+        writingStyle: RewriteStyle,
+        customInstructions: String?,
         modelService: LocalModelService,
         onProgress: @escaping @Sendable (Int) async -> Void
     ) async throws -> String {
@@ -259,6 +272,8 @@ final class RewriteViewModel: ObservableObject {
                 try await modelService.rewrite(
                     text: text,
                     intensity: intensity,
+                    writingStyle: writingStyle,
+                    customInstructions: customInstructions,
                     onProgress: onProgress
                 )
             }
