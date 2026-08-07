@@ -1,3 +1,4 @@
+import RewriteCore
 import SwiftUI
 
 struct GlassyIntensitySlider: View {
@@ -213,6 +214,7 @@ struct GlassyIntensitySlider: View {
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: isLoading)
         }
         .frame(height: 34)
+        .help(RewriteIntensityPolicy.definition(for: Int(value.rounded())))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(loadingProgress == nil ? "Rewrite intensity" : "Rewrite progress")
         .accessibilityValue(loadingProgress == nil ? accessibilityValue : loadingAccessibilityValue)
@@ -237,14 +239,7 @@ struct GlassyIntensitySlider: View {
 
     private var accessibilityValue: String {
         let level = Int(value.rounded())
-        let description: String
-        switch level {
-        case 0: description = "essential corrections only"
-        case 1...3: description = "light improvement"
-        case 4...6: description = "moderate rewrite"
-        case 7...9: description = "substantial rewrite"
-        default: description = "strongest polished rewrite"
-        }
+        let description = RewriteIntensityPolicy.definition(for: level)
         return "Level \(level) of 10, \(description)"
     }
 

@@ -16,6 +16,15 @@ public enum OutputSanitizer {
         return value
     }
 
+    public static func sanitizeSourceFallback(_ source: String) throws -> String {
+        let value = removingDashCharacters(from: source)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else {
+            throw RewriteError.emptyOutput
+        }
+        return value
+    }
+
     private static func removingDashCharacters(from value: String) -> String {
         let dashClass = "[‐‑‒–—―−-]"
         var result = value.replacingOccurrences(

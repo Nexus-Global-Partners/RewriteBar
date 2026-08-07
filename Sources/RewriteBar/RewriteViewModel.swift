@@ -26,7 +26,8 @@ final class RewriteViewModel: ObservableObject {
     private static let defaultIntensity = 3
 
     private let clipboard = ClipboardService()
-    private let modelService: LocalModelService
+    private let rewriteEngine: RewriteEngine
+    private let settings: RewriteSettingsStore
     private var sourceText: String?
     private var preparedOutput: String?
     private var previousClipboardText: String?
@@ -37,8 +38,12 @@ final class RewriteViewModel: ObservableObject {
     private var generationID = UUID()
     private var popoverVisibility = PopoverVisibilityTracker()
 
-    init(modelService: LocalModelService = .shared) {
-        self.modelService = modelService
+    init(
+        rewriteEngine: RewriteEngine = .shared,
+        settings: RewriteSettingsStore = .shared
+    ) {
+        self.rewriteEngine = rewriteEngine
+        self.settings = settings
         let stored = UserDefaults.standard.object(forKey: Self.intensityKey) as? Int
             ?? Self.defaultIntensity
         intensity = Double(min(10, max(0, stored)))
@@ -187,6 +192,10 @@ final class RewriteViewModel: ObservableObject {
         let requestID = UUID()
         generationID = requestID
         let rewriteIntensity = Int(intensity.rounded())
+        let writingStyle = settings.writingStyle
+        let customInstructions = settings.customInstructionsEnabled
+            ? settings.customInstructions
+            : nil
 
         sourceText = text
         preparedOutput = nil
@@ -199,17 +208,21 @@ final class RewriteViewModel: ObservableObject {
             reason: "Rewrite clipboard text"
         )
 
-        generationTask = Task(priority: .userInitiated) { [weak self, modelService] in
+        let request = RewriteRequest(
+            text: text,
+            intensity: rewriteIntensity,
+            writingStyle: writingStyle,
+            customInstructions: customInstructions
+        )
+        generationTask = Task(priority: .userInitiated) { [weak self, rewriteEngine] in
             defer {
                 ProcessInfo.processInfo.endActivity(activity)
             }
             guard let self else { return }
 
             do {
-                let output = try await rewrite(
-                    text: text,
-                    intensity: rewriteIntensity,
-                    modelService: modelService,
+                let output = try await rewriteEngine.rewrite(
+                    request,
                     onProgress: { [weak self] generatedCharacterCount in
                         await self?.updateGenerationProgress(
                             generatedCharacterCount: generatedCharacterCount,
@@ -241,37 +254,6 @@ final class RewriteViewModel: ObservableObject {
             if requestID == generationID {
                 generationTask = nil
             }
-        }
-    }
-
-    private func rewrite(
-        text: String,
-        intensity: Int,
-        modelService: LocalModelService,
-        onProgress: @escaping @Sendable (Int) async -> Void
-    ) async throws -> String {
-        let timeout = PreparationPolicy.timeoutSeconds(
-            forCharacterCount: text.count
-        )
-
-        return try await withThrowingTaskGroup(of: String.self) { group in
-            group.addTask {
-                try await modelService.rewrite(
-                    text: text,
-                    intensity: intensity,
-                    onProgress: onProgress
-                )
-            }
-            group.addTask {
-                try await Task.sleep(for: .seconds(timeout))
-                throw RewriteError.timedOut
-            }
-
-            defer { group.cancelAll() }
-            guard let output = try await group.next() else {
-                throw RewriteError.generationFailed
-            }
-            return output
         }
     }
 
