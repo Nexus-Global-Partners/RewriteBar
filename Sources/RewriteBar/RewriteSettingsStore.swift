@@ -89,7 +89,11 @@ final class RewriteSettingsStore: ObservableObject {
 
     @Published var defaultIntensity: Int {
         didSet {
-            defaultIntensity = min(10, max(0, defaultIntensity))
+            let clamped = min(10, max(0, defaultIntensity))
+            guard defaultIntensity == clamped else {
+                defaultIntensity = clamped
+                return
+            }
             defaults.set(defaultIntensity, forKey: Key.defaultIntensity)
         }
     }

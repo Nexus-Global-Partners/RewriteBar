@@ -109,7 +109,9 @@ Right click the infinity icon and choose Settings. You can configure:
 * Optional custom writing instructions
 * macOS Accessibility permission for selected text replacement
 
-Every style and custom preference remains subordinate to the source. RewriteBar must preserve truth, meaning, intent, uncertainty, language, important details, approximate length, tone of voice, and the recognizable style of the original writer. It rejects artificial filler, corporate language, and dash characters.
+Custom instructions save automatically as you type. Common preferences such as sentence length, directness, warmth, contractions, lowercase presentation, regional spelling, and punctuation are turned into explicit writing cues for the local model. RewriteBar applies compatible preferences while ignoring requests that would invent facts, remove uncertainty, translate the source, change terminology, or alter meaning.
+
+Every style and custom preference remains subordinate to the source. RewriteBar must preserve truth, meaning, intent, uncertainty, language, important details, approximate length, tone of voice, and the recognizable style of the original writer. It rejects artificial filler, corporate language, sentence fragments, and dash characters.
 
 ## Privacy
 
@@ -132,10 +134,13 @@ Useful development commands:
 
 ```sh
 swift build
+./Scripts/test.sh
 swift run RewriteCoreChecks
 ./Scripts/build-app.sh
 ./Scripts/package-release.sh
 ```
+
+`Scripts/test.sh` runs the standard unit and integration suite. `RewriteCoreChecks` provides an additional fast policy gate. The opt in `RewriteBenchmark` executable evaluates all eleven intensities against varied writing, fidelity, structure, safety, and latency cases using the real bundled model.
 
 ## Try it
 
@@ -159,8 +164,10 @@ API latency went from 180 ms to 640 ms between 09:10 and 09:35 UTC only in eu we
 
 ## Architecture
 
-* `RewriteCore` handles validation, all eleven intensity contracts, writing styles, prompt construction, and safe output cleanup.
-* `LocalModelService` loads the bundled model, generates text, and supports cancellation.
+* `RewriteCore` handles validation, all eleven intensity contracts, writing styles, prompt construction, source instruction protection, meaning checks, and safe output cleanup.
+* `RewriteEngine` gives the menu and shortcut paths one normalized, bounded generation interface.
+* `GenerationArbiter` serializes access to the local model and removes cancelled work from the queue.
+* `LocalModelService` loads the bundled model, generates text, validates meaning signals, and falls back safely if a model result changes a protected fact or relationship.
 * `RewriteViewModel` owns rewrite, progress, automatic copy, restore, and failure states.
 * `SelectedTextRewriteCoordinator` owns the shortcut rewrite lifecycle and safe replacement.
 * `AccessibilitySelectionClient` captures and verifies editable selections without simulated keyboard input.

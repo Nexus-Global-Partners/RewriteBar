@@ -26,6 +26,7 @@ done
 
 cd "$project_dir"
 swift build
+"$script_dir/test.sh"
 swift run RewriteCoreChecks
 
 print "RewriteBar $version build $build checks passed."

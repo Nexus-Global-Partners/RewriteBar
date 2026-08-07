@@ -60,10 +60,21 @@ public enum OutputStyleGuard {
             guard !sourceContainsQuotedOccurrence(of: phrase, source: source) else {
                 return result
             }
-            return result.replacingOccurrences(
-                of: phrase,
-                with: directWording,
+            let escapedPhrase = NSRegularExpression.escapedPattern(for: phrase)
+            let pattern = #"(?<![\p{L}\p{N}])"#
+                + escapedPhrase
+                + #"(?![\p{L}\p{N}])"#
+            guard let expression = try? NSRegularExpression(
+                pattern: pattern,
                 options: .caseInsensitive
+            ) else {
+                return result
+            }
+            let range = NSRange(result.startIndex..<result.endIndex, in: result)
+            return expression.stringByReplacingMatches(
+                in: result,
+                range: range,
+                withTemplate: directWording
             )
         }
     }
@@ -114,6 +125,66 @@ public enum OutputStyleGuard {
                     continue
                 }
                 result.replaceSubrange(outputRange, with: exactSourcePhrase)
+                break
+            }
+        }
+        return result
+    }
+
+    public static func restoringCommitmentStrength(
+        in output: String,
+        source: String
+    ) -> String {
+        let sourceExpression = try! NSRegularExpression(
+            pattern: #"\b(can|could|may|might|should)\s+([\p{L}]+)\b"#,
+            options: .caseInsensitive
+        )
+        let sourceRange = NSRange(source.startIndex..<source.endIndex, in: source)
+        var result = output
+
+        for match in sourceExpression.matches(in: source, range: sourceRange) {
+            guard let modalRange = Range(match.range(at: 1), in: source),
+                  let verbRange = Range(match.range(at: 2), in: source) else {
+                continue
+            }
+            let modal = String(source[modalRange])
+            let verb = String(source[verbRange])
+            let escapedVerb = NSRegularExpression.escapedPattern(for: verb)
+            let strengthenedPatterns = [
+                #"\b(?:will|must)\s+\#(escapedVerb)\b"#,
+                #"\b(I|you|we|they|he|she|it)['’]ll\s+\#(escapedVerb)\b"#
+            ]
+
+            for (index, pattern) in strengthenedPatterns.enumerated() {
+                guard let expression = try? NSRegularExpression(
+                    pattern: pattern,
+                    options: .caseInsensitive
+                ) else {
+                    continue
+                }
+                let outputRange = NSRange(
+                    result.startIndex..<result.endIndex,
+                    in: result
+                )
+                guard let strengthened = expression.firstMatch(
+                    in: result,
+                    range: outputRange
+                ), let fullRange = Range(strengthened.range, in: result) else {
+                    continue
+                }
+
+                if index == 0 {
+                    result.replaceSubrange(fullRange, with: "\(modal) \(verb)")
+                } else if let subjectRange = Range(
+                    strengthened.range(at: 1),
+                    in: result
+                ) {
+                    let subject = String(result[subjectRange])
+                    result.replaceSubrange(
+                        fullRange,
+                        with: "\(subject) \(modal.lowercased()) \(verb)"
+                    )
+                }
                 break
             }
         }

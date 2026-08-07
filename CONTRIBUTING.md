@@ -23,6 +23,7 @@ cd RewriteBar
 ```
 
 Add or update a check in `Sources/RewriteCoreChecks` when behavior can be tested without the model.
+Add focused unit or integration coverage in `Tests/RewriteBarTests` for concurrency, settings, shortcut, or cross component behavior.
 
 ## Test the complete app
 
@@ -35,6 +36,8 @@ codesign --verify --deep --strict dist/RewriteBar.app
 ```
 
 Open the built app and test the complete menu bar flow with invented text. Check levels 0, 3, 5, and 10 when prompt or generation behavior changes. Never paste private clipboard content into an issue, test, log, screenshot, or pull request.
+
+Prompt, policy, or model runtime changes should also run the opt in benchmark against the pinned model. The benchmark supports focused case and intensity arguments plus environment controls for writing styles, repetitions, custom instructions, source protection, temperature, cache behavior, and quantized key value storage. Do not commit its generated reports.
 
 Shortcut and Accessibility changes also require manual checks in several host applications:
 

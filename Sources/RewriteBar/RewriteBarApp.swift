@@ -35,6 +35,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         statusFeedbackTask?.cancel()
     }
 
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication,
+        hasVisibleWindows flag: Bool
+    ) -> Bool {
+        SettingsWindowController.shared.show()
+        return true
+    }
+
     func popoverDidClose(_ notification: Notification) {
         viewModel.popoverClosed()
 
@@ -85,6 +93,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 viewModel: viewModel,
                 close: { [weak self] in
                     self?.closeAfterCompletion()
+                },
+                openSettings: { [weak self] in
+                    self?.openSettings()
                 }
             )
         )
@@ -185,7 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             customInstructions: settings.customInstructionsEnabled
                 ? settings.customInstructions
                 : nil,
-            promptingForPermission: true
+            promptingForPermission: false
         )
     }
 

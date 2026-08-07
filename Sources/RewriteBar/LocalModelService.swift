@@ -14,12 +14,7 @@ actor LocalModelService {
     )
     private var modelContainer: ModelContainer?
     private var modelPreparationTask: Task<ModelContainer, Error>?
-    private var isGenerationActive = false
-    private struct GenerationWaiter {
-        let id: UUID
-        let continuation: CheckedContinuation<Void, Error>
-    }
-    private var generationWaiters: [GenerationWaiter] = []
+    private let generationArbiter = GenerationArbiter()
     private var isWarmedUp = false
 
     init() {
@@ -48,18 +43,22 @@ actor LocalModelService {
                 additionalContext: ["enable_thinking": false]
             )
 
-            try await acquireGenerationSlot()
-            defer { releaseGenerationSlot() }
-            try Task.checkCancellation()
-
-            let preparedInput = try await modelContainer.prepare(input: input)
-            let stream = try await modelContainer.generate(
-                input: preparedInput,
-                parameters: generationParameters(maxTokens: 12)
-            )
-
-            for await _ in stream {
+            let permit = try await generationArbiter.acquire()
+            do {
                 try Task.checkCancellation()
+                let preparedInput = try await modelContainer.prepare(input: input)
+                let stream = try await modelContainer.generate(
+                    input: preparedInput,
+                    parameters: generationParameters(maxTokens: 12)
+                )
+
+                for await _ in stream {
+                    try Task.checkCancellation()
+                }
+                await generationArbiter.release(permit)
+            } catch {
+                await generationArbiter.release(permit)
+                throw error
             }
             isWarmedUp = true
             logger.notice("Model warm-up completed")
@@ -124,9 +123,10 @@ actor LocalModelService {
         onProgress: (@Sendable (Int) async -> Void)? = nil
     ) async throws -> String {
         try await prepareModel()
-        return try await generate(
+        let personalizedResult = try await generate(
             text: text,
             intensity: intensity,
+            customInstructions: customInstructions,
             systemPrompt: RewritePromptBuilder.systemPrompt,
             makeUserPrompt: { protectedSource in
                 RewritePromptBuilder.userPrompt(
@@ -139,11 +139,50 @@ actor LocalModelService {
             },
             onProgress: onProgress
         )
+        guard RewriteOutputQualityPolicy.needsUnpersonalizedRetry(
+            source: text,
+            output: personalizedResult,
+            intensity: intensity,
+            customInstructions: customInstructions
+        ) else {
+            return personalizedResult
+        }
+
+        return try await generate(
+            text: text,
+            intensity: intensity,
+            customInstructions: customInstructions,
+            systemPrompt: RewritePromptBuilder.systemPrompt,
+            makeUserPrompt: { protectedSource in
+                RewritePromptBuilder.userPrompt(
+                    text: protectedSource.text,
+                    intensity: intensity,
+                    writingStyle: writingStyle,
+                    customInstructions: nil,
+                    protectedTokens: protectedSource.placeholderTokens
+                )
+            },
+            onProgress: onProgress
+        )
+    }
+
+    func rewrite(
+        request: RewriteRequest,
+        onProgress: (@Sendable (Int) async -> Void)? = nil
+    ) async throws -> String {
+        try await rewrite(
+            text: request.text,
+            intensity: request.intensity,
+            writingStyle: request.writingStyle,
+            customInstructions: request.customInstructions,
+            onProgress: onProgress
+        )
     }
 
     private func generate(
         text: String,
         intensity: Int,
+        customInstructions: String?,
         systemPrompt: String,
         makeUserPrompt: (ProtectedSource) -> String,
         onProgress: (@Sendable (Int) async -> Void)?
@@ -162,78 +201,141 @@ actor LocalModelService {
             additionalContext: ["enable_thinking": false]
         )
 
-        try await acquireGenerationSlot()
-        defer { releaseGenerationSlot() }
-
+        let permit = try await generationArbiter.acquire()
         do {
             try Task.checkCancellation()
-            let preparedInput = try await modelContainer.prepare(input: input)
-            let stream = try await modelContainer.generate(
-                input: preparedInput,
-                parameters: generationParameters(
-                    maxTokens: RewritePromptBuilder.maximumOutputTokens(for: text)
-                )
+            let maximumTokens = RewritePromptBuilder.maximumOutputTokens(for: text)
+            let firstOutput = try await streamOutput(
+                input: input,
+                maxTokens: maximumTokens,
+                onProgress: onProgress,
+                using: modelContainer
+            )
+            var result = try finalizedOutput(
+                firstOutput,
+                protectedSource: protectedSource,
+                source: text,
+                intensity: intensity,
+                customInstructions: customInstructions
+            )
+            var fidelity = OutputFidelityValidator.evaluate(
+                source: text,
+                output: result
             )
 
-            var output = ""
-            var generatedCharacterCount = 0
-            var lastReportedCharacterCount = 0
-            var lastProgressUpdate = Date.distantPast
-            var reachedTokenLimit = false
-            for await event in stream {
-                try Task.checkCancellation()
-                switch event {
-                case .chunk(let chunk):
-                    output.append(chunk)
-                    generatedCharacterCount += chunk.count
-                    let now = Date()
-                    if generatedCharacterCount - lastReportedCharacterCount >= 24,
-                       now.timeIntervalSince(lastProgressUpdate) >= 0.08 {
-                        lastReportedCharacterCount = generatedCharacterCount
-                        lastProgressUpdate = now
-                        await onProgress?(generatedCharacterCount)
-                    }
-                case .info(let info):
-                    if case .length = info.stopReason {
-                        reachedTokenLimit = true
-                    }
-                case .toolCall:
-                    break
-                }
+            if !fidelity.preservesMeaningSignals {
+                logger.warning(
+                    "Generated rewrite failed fidelity validation; using the safe source fallback"
+                )
+                result = try OutputSanitizer.sanitizeSourceFallback(text)
+                fidelity = OutputFidelityValidator.evaluate(
+                    source: text,
+                    output: result
+                )
             }
 
-            await onProgress?(generatedCharacterCount)
-            guard !reachedTokenLimit else {
+            guard fidelity.preservesMeaningSignals else {
                 throw RewriteError.generationFailed
             }
-
             Memory.clearCache()
-            let restored = protectedSource.restoringProtectedContent(in: output)
-                ?? text
-            let sanitized = try OutputSanitizer.sanitize(restored)
-            let withoutFraming = OutputStyleGuard.removingIntroducedFraming(
-                from: sanitized,
-                source: text
-            )
-            let withoutOfficeFiller = OutputStyleGuard.replacingOfficeFiller(
-                in: withoutFraming,
-                source: text,
-                intensity: intensity
-            )
-            return OutputStyleGuard.restoringUncertaintyStrength(
-                in: withoutOfficeFiller,
-                source: text
-            )
+            await generationArbiter.release(permit)
+            return result
         } catch is CancellationError {
+            await generationArbiter.release(permit)
             Memory.clearCache()
             throw RewriteError.cancelled
         } catch let error as RewriteError {
+            await generationArbiter.release(permit)
             Memory.clearCache()
             throw error
         } catch {
+            await generationArbiter.release(permit)
             Memory.clearCache()
             throw RewriteError.generationFailed
         }
+    }
+
+    private func streamOutput(
+        input: sending UserInput,
+        maxTokens: Int,
+        onProgress: (@Sendable (Int) async -> Void)?,
+        using modelContainer: ModelContainer
+    ) async throws -> String {
+        let preparedInput = try await modelContainer.prepare(input: input)
+        let stream = try await modelContainer.generate(
+            input: preparedInput,
+            parameters: generationParameters(maxTokens: maxTokens)
+        )
+
+        var output = ""
+        var generatedCharacterCount = 0
+        var lastReportedCharacterCount = 0
+        var lastProgressUpdate = Date.distantPast
+        var reachedTokenLimit = false
+        for await event in stream {
+            try Task.checkCancellation()
+            switch event {
+            case .chunk(let chunk):
+                output.append(chunk)
+                generatedCharacterCount += chunk.count
+                let now = Date()
+                if generatedCharacterCount - lastReportedCharacterCount >= 24,
+                   now.timeIntervalSince(lastProgressUpdate) >= 0.08 {
+                    lastReportedCharacterCount = generatedCharacterCount
+                    lastProgressUpdate = now
+                    await onProgress?(generatedCharacterCount)
+                }
+            case .info(let info):
+                if case .length = info.stopReason {
+                    reachedTokenLimit = true
+                }
+            case .toolCall:
+                break
+            }
+        }
+
+        await onProgress?(generatedCharacterCount)
+        guard !reachedTokenLimit else {
+            throw RewriteError.generationFailed
+        }
+        return output
+    }
+
+    private func finalizedOutput(
+        _ output: String,
+        protectedSource: ProtectedSource,
+        source: String,
+        intensity: Int,
+        customInstructions: String?
+    ) throws -> String {
+        guard let restored = protectedSource.restoringProtectedContent(
+            in: output
+        ) else {
+            throw RewriteError.generationFailed
+        }
+        let sanitized = try OutputSanitizer.sanitize(restored)
+        let withoutFraming = OutputStyleGuard.removingIntroducedFraming(
+            from: sanitized,
+            source: source
+        )
+        let withoutOfficeFiller = OutputStyleGuard.replacingOfficeFiller(
+            in: withoutFraming,
+            source: source,
+            intensity: intensity
+        )
+        let withUncertainty = OutputStyleGuard.restoringUncertaintyStrength(
+            in: withoutOfficeFiller,
+            source: source
+        )
+        let withCommitment = OutputStyleGuard.restoringCommitmentStrength(
+            in: withUncertainty,
+            source: source
+        )
+        return RewriteCustomInstructionsPolicy.applyingPresentation(
+            to: withCommitment,
+            source: source,
+            instructions: customInstructions
+        )
     }
 
     private func generationParameters(maxTokens: Int) -> GenerateParameters {
@@ -247,48 +349,6 @@ actor LocalModelService {
         )
     }
 
-    private func acquireGenerationSlot() async throws {
-        try Task.checkCancellation()
-        if !isGenerationActive {
-            isGenerationActive = true
-            return
-        }
-
-        let waiterID = UUID()
-        try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation {
-                (continuation: CheckedContinuation<Void, Error>) in
-                guard !Task.isCancelled else {
-                    continuation.resume(throwing: CancellationError())
-                    return
-                }
-                generationWaiters.append(
-                    GenerationWaiter(
-                        id: waiterID,
-                        continuation: continuation
-                    )
-                )
-            }
-        } onCancel: {
-            Task { await self.cancelGenerationWaiter(waiterID) }
-        }
-        try Task.checkCancellation()
-    }
-
-    private func releaseGenerationSlot() {
-        guard !generationWaiters.isEmpty else {
-            isGenerationActive = false
-            return
-        }
-
-        generationWaiters.removeFirst().continuation.resume()
-    }
-
-    private func cancelGenerationWaiter(_ waiterID: UUID) {
-        guard let index = generationWaiters.firstIndex(where: { $0.id == waiterID }) else {
-            return
-        }
-        let waiter = generationWaiters.remove(at: index)
-        waiter.continuation.resume(throwing: CancellationError())
-    }
 }
+
+extension LocalModelService: RewriteGenerating {}

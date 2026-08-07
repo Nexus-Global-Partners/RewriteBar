@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class SettingsWindowController: NSWindowController {
+final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     static let shared = SettingsWindowController()
 
     private init(store: RewriteSettingsStore = .shared) {
@@ -23,6 +23,7 @@ final class SettingsWindowController: NSWindowController {
         )
 
         super.init(window: window)
+        window.delegate = self
     }
 
     @available(*, unavailable)
@@ -32,8 +33,13 @@ final class SettingsWindowController: NSWindowController {
 
     func show() {
         guard let window else { return }
+        NSApp.setActivationPolicy(.regular)
         showWindow(nil)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
     }
 }

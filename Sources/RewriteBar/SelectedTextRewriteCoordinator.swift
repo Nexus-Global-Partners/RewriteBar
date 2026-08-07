@@ -19,16 +19,16 @@ final class SelectedTextRewriteCoordinator: ObservableObject {
     var onFailure: (@MainActor (AccessibilityRewriteFailure) -> Void)?
 
     private let selectionProvider: any EditableTextSelectionProviding
-    private let modelService: LocalModelService
+    private let rewriteEngine: RewriteEngine
     private var rewriteTask: Task<Void, Never>?
     private var activeRewriteID: UUID?
 
     init(
         selectionProvider: any EditableTextSelectionProviding = AccessibilitySelectionClient(),
-        modelService: LocalModelService = .shared
+        rewriteEngine: RewriteEngine = .shared
     ) {
         self.selectionProvider = selectionProvider
-        self.modelService = modelService
+        self.rewriteEngine = rewriteEngine
     }
 
     var isRewriting: Bool {
@@ -76,18 +76,18 @@ final class SelectedTextRewriteCoordinator: ObservableObject {
         let rewriteID = UUID()
         activeRewriteID = rewriteID
         state = .rewriting
-        rewriteTask = Task(priority: .userInitiated) { [weak self, modelService] in
+        let request = RewriteRequest(
+            text: snapshot.originalText,
+            intensity: safeIntensity,
+            writingStyle: writingStyle,
+            customInstructions: customInstructions
+        )
+        rewriteTask = Task(priority: .userInitiated) { [weak self, rewriteEngine] in
             guard let self else { return }
             defer { finishRewrite(rewriteID) }
 
             do {
-                let output = try await rewrite(
-                    snapshot.originalText,
-                    intensity: safeIntensity,
-                    writingStyle: writingStyle,
-                    customInstructions: customInstructions,
-                    using: modelService
-                )
+                let output = try await rewriteEngine.rewrite(request)
                 try Task.checkCancellation()
                 guard activeRewriteID == rewriteID else { return }
                 completedOutput = output
@@ -127,39 +127,6 @@ final class SelectedTextRewriteCoordinator: ObservableObject {
         guard rewriteTask == nil else { return }
         completedOutput = nil
         state = .idle
-    }
-
-    private func rewrite(
-        _ text: String,
-        intensity: Int,
-        writingStyle: RewriteStyle,
-        customInstructions: String?,
-        using modelService: LocalModelService
-    ) async throws -> String {
-        let timeout = PreparationPolicy.timeoutSeconds(
-            forCharacterCount: text.count
-        )
-
-        return try await withThrowingTaskGroup(of: String.self) { group in
-            group.addTask {
-                try await modelService.rewrite(
-                    text: text,
-                    intensity: intensity,
-                    writingStyle: writingStyle,
-                    customInstructions: customInstructions
-                )
-            }
-            group.addTask {
-                try await Task.sleep(for: .seconds(timeout))
-                throw RewriteError.timedOut
-            }
-
-            defer { group.cancelAll() }
-            guard let output = try await group.next() else {
-                throw RewriteError.generationFailed
-            }
-            return output
-        }
     }
 
     private func showFailure(_ failure: AccessibilityRewriteFailure) {

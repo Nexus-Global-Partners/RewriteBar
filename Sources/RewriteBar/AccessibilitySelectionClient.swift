@@ -1,3 +1,4 @@
+import AppKit
 import ApplicationServices
 import Foundation
 
@@ -15,6 +16,10 @@ protocol EditableTextSelectionProviding: AnyObject {
 }
 
 enum AccessibilityPermission {
+    private static let serviceName = "Accessibility"
+    private static let setupAlertBundleIdentifier =
+        "com.apple.accessibility.universalAccessAuthWarn"
+
     static var isGranted: Bool {
         AXIsProcessTrusted()
     }
@@ -25,6 +30,51 @@ enum AccessibilityPermission {
             "AXTrustedCheckOptionPrompt": true
         ] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
+    }
+
+    @discardableResult
+    static func beginSetup() -> Bool {
+        refreshPermissionRecord(
+            reset: resetStoredDecision,
+            request: requestIfNeeded
+        )
+    }
+
+    static func refreshPermissionRecord(
+        reset: () -> Bool,
+        request: () -> Bool
+    ) -> Bool {
+        _ = reset()
+        return request()
+    }
+
+    static func dismissSetupAlert() {
+        let alerts = NSRunningApplication.runningApplications(
+            withBundleIdentifier: setupAlertBundleIdentifier
+        )
+        for alert in alerts {
+            _ = alert.terminate()
+        }
+    }
+
+    private static func resetStoredDecision() -> Bool {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
+            return false
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        process.arguments = ["reset", serviceName, bundleIdentifier]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        } catch {
+            return false
+        }
     }
 }
 

@@ -3,16 +3,63 @@ import RewriteCore
 import SwiftUI
 
 @MainActor
+final class AccessibilitySetupModel: ObservableObject {
+    @Published private(set) var isGranted: Bool
+
+    private let permissionCheck: @MainActor () -> Bool
+    private let beginSetupAction: @MainActor () -> Void
+    private let setupDidCompleteAction: @MainActor () -> Void
+    private var isAwaitingSetupCompletion = false
+
+    init(
+        permissionCheck: @escaping @MainActor () -> Bool = {
+            AccessibilityPermission.isGranted
+        },
+        beginSetupAction: @escaping @MainActor () -> Void = {
+            AccessibilityPermission.beginSetup()
+        },
+        setupDidCompleteAction: @escaping @MainActor () -> Void = {
+            AccessibilityPermission.dismissSetupAlert()
+        }
+    ) {
+        self.permissionCheck = permissionCheck
+        self.beginSetupAction = beginSetupAction
+        self.setupDidCompleteAction = setupDidCompleteAction
+        isGranted = permissionCheck()
+    }
+
+    func refresh() {
+        let granted = permissionCheck()
+        let setupCompleted = isAwaitingSetupCompletion && granted
+        isGranted = granted
+
+        if setupCompleted {
+            isAwaitingSetupCompletion = false
+            setupDidCompleteAction()
+        }
+    }
+
+    func beginSetup() {
+        isAwaitingSetupCompletion = true
+        beginSetupAction()
+        refresh()
+    }
+}
+
+@MainActor
 struct SettingsView: View {
     @ObservedObject var store: RewriteSettingsStore
 
     @State private var instructionsDraft: String
-    @State private var accessibilityGranted = AccessibilityPermission.isGranted
-    @State private var didSaveInstructions = false
+    @StateObject private var accessibility: AccessibilitySetupModel
 
-    init(store: RewriteSettingsStore = .shared) {
+    init(
+        store: RewriteSettingsStore = .shared,
+        accessibility: AccessibilitySetupModel = AccessibilitySetupModel()
+    ) {
         self.store = store
         _instructionsDraft = State(initialValue: store.customInstructions)
+        _accessibility = StateObject(wrappedValue: accessibility)
     }
 
     var body: some View {
@@ -81,32 +128,44 @@ struct SettingsView: View {
                 }
 
                 HStack(spacing: 8) {
-                    Circle()
-                        .fill(accessibilityGranted ? Color.primary : Color.secondary)
-                        .frame(width: 7, height: 7)
-                        .accessibilityHidden(true)
+                    Image(
+                        systemName: accessibility.isGranted
+                            ? "checkmark.circle.fill"
+                            : "circle.dotted"
+                    )
+                    .foregroundStyle(accessibility.isGranted ? .primary : .secondary)
+                    .accessibilityHidden(true)
 
-                    Text(accessibilityGranted ? "Accessibility allowed" : "Accessibility required")
-                        .foregroundStyle(accessibilityGranted ? .primary : .secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(accessibility.isGranted ? "Ready" : "Setup needed")
+                            .foregroundStyle(accessibility.isGranted ? .primary : .secondary)
+
+                        Text(
+                            accessibility.isGranted
+                                ? "Selected text can be replaced."
+                                : "Allow this copy of RewriteBar in macOS Accessibility."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
 
                     Spacer()
 
-                    if !accessibilityGranted {
-                        Button("Allow Access") {
-                            accessibilityGranted = AccessibilityPermission.requestIfNeeded()
+                    if !accessibility.isGranted {
+                        Button("Set Up") {
+                            accessibility.beginSetup()
                         }
-                        .accessibilityHint("Opens the macOS permission prompt for selected text rewriting")
-
-                        Button("Open Settings") {
-                            openAccessibilitySettings()
-                        }
-                        .accessibilityHint("Opens Accessibility privacy settings")
+                        .accessibilityHint("Opens macOS Accessibility settings")
                     }
                 }
             } header: {
                 Text("Keyboard")
             } footer: {
-                Text("Select editable text in any supported app, then press the shortcut. Press Delete while recording to disable it.")
+                Text(
+                    accessibility.isGranted
+                        ? "Select editable text, then press the shortcut. The result replaces the selection and is copied."
+                        : "Set Up refreshes any older RewriteBar permission, then macOS asks you to allow this copy."
+                )
             }
 
             Section {
@@ -139,12 +198,14 @@ struct SettingsView: View {
                     .opacity(store.customInstructionsEnabled ? 1 : 0.48)
                     .accessibilityLabel("Custom rewrite instructions")
                     .onChange(of: instructionsDraft) { _, newValue in
-                        if newValue.count > RewriteSettingsStore.maximumInstructionLength {
-                            instructionsDraft = String(
-                                newValue.prefix(RewriteSettingsStore.maximumInstructionLength)
-                            )
+                        let bounded = String(
+                            newValue.prefix(RewriteSettingsStore.maximumInstructionLength)
+                        )
+                        if bounded != newValue {
+                            instructionsDraft = bounded
+                            return
                         }
-                        didSaveInstructions = false
+                        store.saveCustomInstructions(bounded)
                     }
 
                 HStack {
@@ -159,22 +220,13 @@ struct SettingsView: View {
                     Button("Reset") {
                         store.resetCustomInstructions()
                         instructionsDraft = ""
-                        didSaveInstructions = false
                     }
                     .disabled(instructionsDraft.isEmpty && store.customInstructions.isEmpty)
 
-                    Button(didSaveInstructions ? "Saved" : "Save") {
-                        store.saveCustomInstructions(instructionsDraft)
-                        instructionsDraft = store.customInstructions
-                        didSaveInstructions = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(AppPalette.graphite)
-                    .disabled(
-                        !store.customInstructionsEnabled
-                            || normalizedDraft == store.customInstructions
-                    )
-                    .accessibilityHint("Saves the custom instructions used for future rewrites")
+                    Text("Saved automatically")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .accessibilityLabel("Custom instructions save automatically")
                 }
             } header: {
                 Text("Custom instructions")
@@ -186,18 +238,14 @@ struct SettingsView: View {
         .tint(AppPalette.graphite)
         .scrollContentBackground(.hidden)
         .background {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .overlay(Color.white.opacity(0.04))
-                .ignoresSafeArea()
+            AppGlassBackground(neutralSurfaceOpacity: 0.90)
         }
         .safeAreaInset(edge: .bottom) {
             HStack {
                 Button("Restore Defaults") {
                     store.resetAll()
                     instructionsDraft = store.customInstructions
-                    didSaveInstructions = false
-                    accessibilityGranted = AccessibilityPermission.isGranted
+                    accessibility.refresh()
                 }
                 .accessibilityHint("Restores all RewriteBar settings to their defaults")
 
@@ -209,7 +257,11 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
-            .background(.thinMaterial)
+            .background {
+                Rectangle()
+                    .fill(.thinMaterial)
+                    .overlay(AppPalette.frost.opacity(0.16))
+            }
             .overlay(alignment: .top) { Divider() }
         }
         .frame(width: 520, height: 590)
@@ -218,7 +270,13 @@ struct SettingsView: View {
                 for: NSApplication.didBecomeActiveNotification
             )
         ) { _ in
-            accessibilityGranted = AccessibilityPermission.isGranted
+            accessibility.refresh()
+        }
+        .task {
+            while !Task.isCancelled {
+                accessibility.refresh()
+                try? await Task.sleep(for: .milliseconds(500))
+            }
         }
     }
 
@@ -229,14 +287,4 @@ struct SettingsView: View {
         )
     }
 
-    private var normalizedDraft: String {
-        instructionsDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func openAccessibilitySettings() {
-        guard let url = URL(
-            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-        ) else { return }
-        NSWorkspace.shared.open(url)
-    }
 }

@@ -211,6 +211,11 @@ enum RewriteCoreChecks {
             "The rewrite prompt is missing its run-on sentence example."
         )
         try require(
+            RewritePromptBuilder.systemPrompt.contains("Every sentence must be grammatically complete")
+                && RewritePromptBuilder.systemPrompt.contains("especially phrase"),
+            "The rewrite prompt should reject detached qualifier fragments in every language."
+        )
+        try require(
             RewritePromptBuilder.systemPrompt.contains("never add line breaks inside it"),
             "The rewrite prompt is missing its paragraph fidelity rule."
         )
@@ -350,8 +355,22 @@ enum RewriteCoreChecks {
         try require(
             !prompt.contains(boundaryAttempt)
                 && prompt.contains("‹/END_CUSTOM_PREFERENCES›")
-                && prompt.contains("lower priority than every mandatory"),
+                && prompt.contains("Follow every compatible preference visibly")
+                && prompt.contains("ignore only the part that conflicts")
+                && prompt.contains("never reduces the correction or rewrite work")
+                && prompt.contains("A lowercase preference")
+                && prompt.contains("Personalization success criterion"),
             "Custom instructions should not be able to close their prompt boundary or override safety rules."
+        )
+        let inactivePrompt = RewritePromptBuilder.userPrompt(
+            text: "Keep this clear.",
+            intensity: 3,
+            customInstructions: "  "
+        )
+        try require(
+            inactivePrompt.contains("Personalization status: inactive")
+                && !inactivePrompt.contains("<BEGIN_CUSTOM_PREFERENCES>"),
+            "Blank custom instructions should not create an active personalization boundary."
         )
         let oversized = String(
             repeating: "a",
@@ -361,6 +380,53 @@ enum RewriteCoreChecks {
             RewriteCustomInstructionsPolicy.normalized(oversized)?.count
                 == RewriteCustomInstructionsPolicy.maximumCharacters,
             "Custom instructions should have a bounded prompt size."
+        )
+        let lowercasePlan = RewriteCustomInstructionsPolicy.executionPlan(
+            "Keep my lowercase writing style. Keep sentences short and direct."
+        )
+        try require(
+            lowercasePlan.lowercaseSentenceStarts
+                && lowercasePlan.modelInstructions?.contains("lowercase") == false
+                && lowercasePlan.acceptanceCues.contains(where: {
+                    $0.contains("grammatically complete")
+                }),
+            "Lowercase presentation should be separated from model generation while retaining compatible cues."
+        )
+        let presented = RewriteCustomInstructionsPolicy.applyingPresentation(
+            to: "Hey, I did not reply earlier. Camille can review it. This is ready.",
+            source: "hey i didnt reply earlier. Camille can review it. this is ready.",
+            instructions: "Keep my lowercase writing style."
+        )
+        try require(
+            presented == "hey, i did not reply earlier. Camille can review it. this is ready.",
+            "Lowercase presentation should affect sentence openings while preserving source names."
+        )
+        try require(
+            RewriteOutputQualityPolicy.needsUnpersonalizedRetry(
+                source: "hey i didnt reply and itll be late",
+                output: "hey i didnt reply and itll be late",
+                intensity: 3,
+                customInstructions: "Keep it lowercase and direct."
+            ),
+            "An unchanged personalized output with obvious errors should receive a clean retry."
+        )
+        try require(
+            !RewriteOutputQualityPolicy.needsUnpersonalizedRetry(
+                source: "This sentence is already correct.",
+                output: "This sentence is already correct.",
+                intensity: 3,
+                customInstructions: "Keep it direct."
+            ),
+            "A correct unchanged sentence should not trigger an unnecessary retry."
+        )
+        try require(
+            RewriteOutputQualityPolicy.needsUnpersonalizedRetry(
+                source: "No se entiende quién aprueba cada parte.",
+                output: "No se entiende. Especialmente, quién aprueba cada parte.",
+                intensity: 5,
+                customInstructions: "Usa frases cortas."
+            ),
+            "A personalization preference should not introduce a sentence fragment."
         )
     }
 
@@ -479,15 +545,20 @@ enum RewriteCoreChecks {
         let protected = SourceInstructionProtector.protect(source)
         try require(protected.containsProtectedContent, "Instruction like source was not protected.")
         try require(!protected.text.contains("add a claim"), "Protected instruction leaked into the model prompt.")
+        guard let token = protected.placeholderTokens.first else {
+            throw CheckFailure(message: "Protected source has no placeholder token.")
+        }
         try require(
             protected.restoringProtectedContent(
-                in: "Keep this line.\n<PROTECTED_SOURCE_1>\nKeep this too."
+                in: "Keep this line.\n\(token)\nKeep this too."
             ) == source,
             "Protected source was not restored exactly."
         )
         try require(
-            protected.restoringProtectedContent(in: "The token was omitted.") == nil,
-            "A missing protected token should fail closed."
+            protected.restoringProtectedContent(
+                in: "Keep this line.\nKeep this too."
+            ) == source,
+            "A dropped protected token should restore the source line deterministically."
         )
 
     }

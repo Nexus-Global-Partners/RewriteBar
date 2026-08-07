@@ -5,6 +5,7 @@ import SwiftUI
 struct PopoverView: View {
     @ObservedObject var viewModel: RewriteViewModel
     var close: () -> Void = {}
+    var openSettings: () -> Void = {}
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -58,11 +59,30 @@ struct PopoverView: View {
                     .accessibilityLabel("Restore previous clipboard text")
                     .padding(.leading, 8)
                 }
+
+                if !viewModel.isWorking && !viewModel.isConfirmation {
+                    HStack {
+                        Spacer()
+
+                        Button(action: openSettings) {
+                            Image(systemName: "gearshape")
+                                .font(.system(size: 10.5, weight: .medium))
+                                .foregroundStyle(AppPalette.deepGraphite.opacity(0.34))
+                                .frame(width: 26, height: 26)
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .keyboardShortcut(",", modifiers: .command)
+                        .help("Open Settings")
+                        .accessibilityLabel("Open Settings")
+                        .padding(.trailing, 8)
+                    }
+                }
             }
         }
         .padding(16)
         .frame(width: 292)
-        .background { glassBackground }
+        .background { AppGlassBackground() }
         .tint(AppPalette.accent)
         .task(id: viewModel.state) {
             let completionAction: PopoverAction
@@ -92,43 +112,4 @@ struct PopoverView: View {
         )
     }
 
-    private var glassBackground: some View {
-        ZStack {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-
-            RadialGradient(
-                colors: [
-                    .white.opacity(0.20),
-                    AppPalette.silver.opacity(0.10),
-                    .clear
-                ],
-                center: .topLeading,
-                startRadius: 0,
-                endRadius: 250
-            )
-
-            LinearGradient(
-                colors: [
-                    AppPalette.frost.opacity(0.08),
-                    AppPalette.graphite.opacity(0.05),
-                    Color.clear
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            LinearGradient(
-                colors: [.white.opacity(0.15), .clear],
-                startPoint: .top,
-                endPoint: .center
-            )
-        }
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(.white.opacity(0.24))
-                .frame(height: 1)
-        }
-        .ignoresSafeArea()
-    }
 }
