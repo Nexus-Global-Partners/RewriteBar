@@ -82,6 +82,7 @@ final class RewriteSettingsStore: ObservableObject {
         static let writingStyle = "settings.writingStyle"
         static let keyboardShortcut = "settings.keyboardShortcut"
         static let customInstructionsEnabled = "settings.customInstructionsEnabled"
+        static let customInstructionsExclusive = "settings.customInstructionsExclusive"
         static let customInstructions = "settings.customInstructions"
     }
 
@@ -108,6 +109,15 @@ final class RewriteSettingsStore: ObservableObject {
 
     @Published var customInstructionsEnabled: Bool {
         didSet { defaults.set(customInstructionsEnabled, forKey: Key.customInstructionsEnabled) }
+    }
+
+    @Published var customInstructionsExclusive: Bool {
+        didSet {
+            defaults.set(
+                customInstructionsExclusive,
+                forKey: Key.customInstructionsExclusive
+            )
+        }
     }
 
     @Published private(set) var customInstructions: String
@@ -138,6 +148,9 @@ final class RewriteSettingsStore: ObservableObject {
         }
 
         customInstructionsEnabled = defaults.bool(forKey: Key.customInstructionsEnabled)
+        customInstructionsExclusive = defaults.bool(
+            forKey: Key.customInstructionsExclusive
+        )
         customInstructions = defaults.string(forKey: Key.customInstructions) ?? ""
         shortcutRegistrationError = nil
     }
@@ -151,6 +164,7 @@ final class RewriteSettingsStore: ObservableObject {
     func resetCustomInstructions() {
         customInstructions = ""
         customInstructionsEnabled = false
+        customInstructionsExclusive = false
         defaults.removeObject(forKey: Key.customInstructions)
     }
 

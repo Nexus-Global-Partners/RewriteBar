@@ -15,11 +15,13 @@ func settingsUseProductDefaultsAndPersistChanges() throws {
     #expect(store.keyboardShortcut == .rewriteDefault)
     #expect(store.keyboardShortcut?.displayName == "⌘R")
     #expect(!store.customInstructionsEnabled)
+    #expect(!store.customInstructionsExclusive)
 
     store.defaultIntensity = 14
     store.writingStyle = .clear
     store.keyboardShortcut = nil
     store.customInstructionsEnabled = true
+    store.customInstructionsExclusive = true
     store.saveCustomInstructions("  Keep it direct.  ")
 
     let reloaded = RewriteSettingsStore(defaults: defaults)
@@ -27,7 +29,12 @@ func settingsUseProductDefaultsAndPersistChanges() throws {
     #expect(reloaded.writingStyle == .clear)
     #expect(reloaded.keyboardShortcut == nil)
     #expect(reloaded.customInstructionsEnabled)
+    #expect(reloaded.customInstructionsExclusive)
     #expect(reloaded.customInstructions == "Keep it direct.")
+
+    reloaded.resetCustomInstructions()
+    #expect(!reloaded.customInstructionsEnabled)
+    #expect(!reloaded.customInstructionsExclusive)
 }
 
 @Test @MainActor

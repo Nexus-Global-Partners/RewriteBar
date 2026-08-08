@@ -175,6 +175,26 @@ struct SettingsView: View {
                 Toggle("Use custom instructions", isOn: $store.customInstructionsEnabled)
                     .accessibilityHint("Applies your preferences to every rewrite")
 
+                LabeledContent("Exclusive") {
+                    HStack(spacing: 8) {
+                        Text(store.customInstructionsExclusive ? "Yes" : "No")
+                            .foregroundStyle(.secondary)
+
+                        Toggle(
+                            "Use only custom instructions for writing style",
+                            isOn: $store.customInstructionsExclusive
+                        )
+                        .labelsHidden()
+                    }
+                }
+                .disabled(!store.customInstructionsEnabled)
+                .opacity(store.customInstructionsEnabled ? 1 : 0.48)
+                .accessibilityHint(
+                    store.customInstructionsExclusive
+                        ? "The selected writing style is ignored"
+                        : "Custom instructions are added to the selected writing style"
+                )
+
                 TextEditor(text: $instructionsDraft)
                     .font(.body)
                     .frame(minHeight: 78, maxHeight: 108)
@@ -234,7 +254,11 @@ struct SettingsView: View {
             } header: {
                 Text("Custom instructions")
             } footer: {
-                Text("Preferences can guide style, but cannot change the source meaning, facts, language, or safety rules.")
+                Text(
+                    store.customInstructionsExclusive
+                        ? "Exclusive uses only your custom instructions for style. Meaning, facts, language, intensity, and safety rules still apply."
+                        : "Custom instructions add to the selected writing style. Meaning, facts, language, intensity, and safety rules still apply."
+                )
             }
         }
         .formStyle(.grouped)

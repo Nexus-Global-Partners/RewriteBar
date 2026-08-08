@@ -8,12 +8,45 @@ func requestNormalizesUserControlledValues() {
         text: "Source",
         intensity: 42,
         writingStyle: .clear,
-        customInstructions: "  Keep it direct.\0  "
+        customInstructions: "  Keep it direct.\0  ",
+        customInstructionsExclusive: true
     )
 
     #expect(request.intensity == 10)
     #expect(request.writingStyle == .clear)
     #expect(request.customInstructions == "Keep it direct.")
+    #expect(request.customInstructionsExclusive)
+
+    let requestWithoutInstructions = RewriteRequest(
+        text: "Source",
+        intensity: 3,
+        customInstructionsExclusive: true
+    )
+    #expect(!requestWithoutInstructions.customInstructionsExclusive)
+}
+
+@Test
+func exclusiveCustomInstructionsReplaceTheSelectedWritingStyle() {
+    let additivePrompt = RewritePromptBuilder.userPrompt(
+        text: "Please review this.",
+        intensity: 3,
+        writingStyle: .persuasive,
+        customInstructions: "Keep it understated."
+    )
+    #expect(additivePrompt.contains("Writing style: Persuasive"))
+    #expect(additivePrompt.contains("Custom preference mode: additive"))
+
+    let exclusivePrompt = RewritePromptBuilder.userPrompt(
+        text: "Please review this.",
+        intensity: 3,
+        writingStyle: .persuasive,
+        customInstructions: "Keep it understated.",
+        customInstructionsExclusive: true
+    )
+    #expect(exclusivePrompt.contains("Writing style: Custom instructions only"))
+    #expect(exclusivePrompt.contains("Custom preference mode: exclusive"))
+    #expect(!exclusivePrompt.contains("Writing style: Persuasive"))
+    #expect(!exclusivePrompt.contains(RewriteStyle.persuasive.promptInstruction))
 }
 
 @Test

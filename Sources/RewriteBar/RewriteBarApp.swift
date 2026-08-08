@@ -196,6 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             customInstructions: settings.customInstructionsEnabled
                 ? settings.customInstructions
                 : nil,
+            customInstructionsExclusive: settings.customInstructionsExclusive,
             promptingForPermission: false
         )
     }

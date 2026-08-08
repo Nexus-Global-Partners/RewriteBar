@@ -372,6 +372,31 @@ enum RewriteCoreChecks {
                 && !inactivePrompt.contains("<BEGIN_CUSTOM_PREFERENCES>"),
             "Blank custom instructions should not create an active personalization boundary."
         )
+        let additivePrompt = RewritePromptBuilder.userPrompt(
+            text: "Please review this.",
+            intensity: 3,
+            writingStyle: .persuasive,
+            customInstructions: "Keep it understated."
+        )
+        try require(
+            additivePrompt.contains("Writing style: Persuasive")
+                && additivePrompt.contains("Custom preference mode: additive"),
+            "Additive custom instructions should keep the selected writing style."
+        )
+        let exclusivePrompt = RewritePromptBuilder.userPrompt(
+            text: "Please review this.",
+            intensity: 3,
+            writingStyle: .persuasive,
+            customInstructions: "Keep it understated.",
+            customInstructionsExclusive: true
+        )
+        try require(
+            exclusivePrompt.contains("Writing style: Custom instructions only")
+                && exclusivePrompt.contains("Custom preference mode: exclusive")
+                && !exclusivePrompt.contains("Writing style: Persuasive")
+                && !exclusivePrompt.contains(RewriteStyle.persuasive.promptInstruction),
+            "Exclusive custom instructions should replace the selected writing style."
+        )
         let oversized = String(
             repeating: "a",
             count: RewriteCustomInstructionsPolicy.maximumCharacters + 10

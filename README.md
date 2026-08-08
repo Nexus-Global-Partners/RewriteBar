@@ -106,16 +106,16 @@ Right click the infinity icon and choose Settings. You can configure:
 * Shortcut intensity, with level 3 as the initial default
 * RewriteBar, Clear, Professional, Conversational, or Persuasive writing style
 * Any available keyboard shortcut using Command, Control, or Option
-* Optional custom writing instructions
+* Optional custom writing instructions, either added to the selected style or used exclusively
 * macOS Accessibility permission for selected text replacement
 
-Custom instructions save automatically as you type. Common preferences such as sentence length, directness, warmth, contractions, lowercase presentation, regional spelling, and punctuation are turned into explicit writing cues for the local model. RewriteBar applies compatible preferences while ignoring requests that would invent facts, remove uncertainty, translate the source, change terminology, or alter meaning.
+Custom instructions save automatically as you type. By default, they add to the selected writing style. Turn on Exclusive to ignore the selected style and use only your custom instructions for presentation. Intensity and all source preservation rules still apply in both modes. Common preferences such as sentence length, directness, warmth, contractions, lowercase presentation, regional spelling, and punctuation are turned into explicit writing cues for the local model. RewriteBar applies compatible preferences while ignoring requests that would invent facts, remove uncertainty, translate the source, change terminology, or alter meaning.
 
 Every style and custom preference remains subordinate to the source. RewriteBar must preserve truth, meaning, intent, uncertainty, language, important details, approximate length, tone of voice, and the recognizable style of the original writer. It rejects artificial filler, corporate language, sentence fragments, and dash characters.
 
 ## Privacy
 
-The Qwen3 1.7B model is bundled inside each release and runs in process with MLX. Clipboard and selected text are never sent over the network, displayed in the app, logged, or saved. RewriteBar stores only local preferences: the last menu intensity, shortcut intensity, writing style, shortcut, and optional custom instructions.
+The Qwen3 1.7B model is bundled inside each release and runs in process with MLX. Clipboard and selected text are never sent over the network, displayed in the app, logged, or saved. RewriteBar stores only local preferences: the last menu intensity, shortcut intensity, writing style, shortcut, optional custom instructions, and whether those instructions are additive or exclusive.
 
 Accessibility access is used only when the configured shortcut asks RewriteBar to read and replace the current editable selection. Secure text fields are refused. Before replacement, RewriteBar verifies that the application, focused element, and exact selected range are still the same. This keeps replacement safe while supporting dynamic editors that normalize selected text during generation.
 
