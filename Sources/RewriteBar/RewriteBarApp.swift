@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var restoresFocusAfterClose = false
     private var shortcutSettingsObservation: AnyCancellable?
     private var statusFeedbackTask: Task<Void, Never>?
+    private var accessibilityRecovery = AccessibilityPermissionRecoveryState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -226,6 +227,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         )
 
         if failure == .permissionRequired {
+            if accessibilityRecovery.shouldBeginSetup(for: failure) {
+                AccessibilityPermission.beginSetup()
+            }
             SettingsWindowController.shared.show(
                 emphasizeAccessibilitySetup: true
             )

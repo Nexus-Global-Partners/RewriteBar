@@ -221,6 +221,22 @@ func accessibilitySetupResetsOldIdentityBeforeRequestingCurrentBuild() {
     #expect(!granted)
 }
 
+@Test
+func accessibilityPermissionFailureStartsAutomaticRecoveryOnlyOnce() {
+    var recovery = AccessibilityPermissionRecoveryState()
+    let firstPermissionFailure = recovery.shouldBeginSetup(
+        for: .permissionRequired
+    )
+    let repeatedPermissionFailure = recovery.shouldBeginSetup(
+        for: .permissionRequired
+    )
+    let unrelatedFailure = recovery.shouldBeginSetup(for: .selectionEmpty)
+
+    #expect(firstPermissionFailure)
+    #expect(!repeatedPermissionFailure)
+    #expect(!unrelatedFailure)
+}
+
 @Test @MainActor
 func shortcutRewriteReplacesSelectionAndReportsCompletion() async throws {
     let selection = SelectionStub(text: "Original")

@@ -78,6 +78,22 @@ enum AccessibilityPermission {
     }
 }
 
+struct AccessibilityPermissionRecoveryState {
+    private(set) var hasRequestedSetup = false
+
+    mutating func shouldBeginSetup(
+        for failure: AccessibilityRewriteFailure
+    ) -> Bool {
+        guard failure == .permissionRequired,
+              !hasRequestedSetup else {
+            return false
+        }
+
+        hasRequestedSetup = true
+        return true
+    }
+}
+
 @MainActor
 final class AccessibilitySelectionClient {
     func captureFocusedSelection(

@@ -8,6 +8,7 @@
 * Lets custom instructions either add to the selected writing style or become the only added style direction.
 * Enforces requests to avoid contractions after generation while preserving exact quoted passages.
 * Makes Accessibility setup easier to notice and condenses the enabled state into a quiet status pin.
+* Starts permission recovery automatically when a local rebuild invalidates an older Accessibility grant.
 * Aligns the custom instruction placeholder with the native text cursor.
 * Refines dark mode with a deeper graphite glass surface, softer text contrast, and restrained frosted controls.
 * Expands the standard suite and real model benchmark coverage for personalization, fidelity, styles, intensity, and latency.
