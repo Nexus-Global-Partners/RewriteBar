@@ -226,7 +226,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         )
 
         if failure == .permissionRequired {
-            SettingsWindowController.shared.show()
+            SettingsWindowController.shared.show(
+                emphasizeAccessibilitySetup: true
+            )
         }
     }
 

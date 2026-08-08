@@ -49,15 +49,18 @@ final class AccessibilitySetupModel: ObservableObject {
 @MainActor
 struct SettingsView: View {
     @ObservedObject var store: RewriteSettingsStore
+    @ObservedObject var presentation: SettingsPresentationModel
 
     @State private var instructionsDraft: String
     @StateObject private var accessibility: AccessibilitySetupModel
 
     init(
         store: RewriteSettingsStore = .shared,
+        presentation: SettingsPresentationModel = SettingsPresentationModel(),
         accessibility: AccessibilitySetupModel = AccessibilitySetupModel()
     ) {
         self.store = store
+        self.presentation = presentation
         _instructionsDraft = State(initialValue: store.customInstructions)
         _accessibility = StateObject(wrappedValue: accessibility)
     }
@@ -152,7 +155,9 @@ struct SettingsView: View {
                     Spacer()
 
                     if !accessibility.isGranted {
-                        Button("Set Up") {
+                        SetupGlassButton(
+                            emphasisToken: presentation.accessibilitySetupEmphasis
+                        ) {
                             accessibility.beginSetup()
                         }
                         .accessibilityHint("Opens macOS Accessibility settings")
@@ -287,4 +292,83 @@ struct SettingsView: View {
         )
     }
 
+}
+
+private struct SetupGlassButton: View {
+    let emphasisToken: Int
+    let action: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var emphasisStrength = 0.0
+    @State private var emphasisTask: Task<Void, Never>?
+
+    var body: some View {
+        Button(action: action) {
+            Text("Set Up")
+                .font(.system(.body, design: .rounded, weight: .medium))
+                .foregroundStyle(AppPalette.deepGraphite)
+                .padding(.horizontal, 13)
+                .frame(height: 28)
+                .background {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(.regularMaterial)
+
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(.white.opacity(0.62 + (0.22 * emphasisStrength)))
+
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(
+                                .white.opacity(0.88 + (0.12 * emphasisStrength)),
+                                lineWidth: 0.8
+                            )
+
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(
+                                AppPalette.graphite.opacity(0.10),
+                                lineWidth: 0.7
+                            )
+                    }
+                    .shadow(
+                        color: AppPalette.graphite.opacity(0.12 + (0.08 * emphasisStrength)),
+                        radius: 4 + (3 * emphasisStrength),
+                        y: 2
+                    )
+                }
+                .scaleEffect(1 + (0.045 * emphasisStrength))
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onChange(of: emphasisToken) { _, _ in
+            emphasize()
+        }
+        .onDisappear {
+            emphasisTask?.cancel()
+        }
+    }
+
+    private func emphasize() {
+        emphasisTask?.cancel()
+
+        if reduceMotion {
+            emphasisStrength = 1
+            emphasisTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(450))
+                guard !Task.isCancelled else { return }
+                emphasisStrength = 0
+            }
+            return
+        }
+
+        withAnimation(.easeOut(duration: 0.12)) {
+            emphasisStrength = 1
+        }
+        emphasisTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(180))
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.72)) {
+                emphasisStrength = 0
+            }
+        }
+    }
 }
