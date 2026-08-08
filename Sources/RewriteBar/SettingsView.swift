@@ -185,7 +185,7 @@ struct SettingsView: View {
                                 .font(.body)
                                 .foregroundStyle(.tertiary)
                                 .padding(.horizontal, 10)
-                                .padding(.vertical, 12)
+                                .padding(.vertical, 5)
                                 .allowsHitTesting(false)
                                 .accessibilityHidden(true)
                         }
