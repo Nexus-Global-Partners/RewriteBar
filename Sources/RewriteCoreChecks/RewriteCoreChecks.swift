@@ -372,6 +372,31 @@ enum RewriteCoreChecks {
                 && !inactivePrompt.contains("<BEGIN_CUSTOM_PREFERENCES>"),
             "Blank custom instructions should not create an active personalization boundary."
         )
+        let additivePrompt = RewritePromptBuilder.userPrompt(
+            text: "Please review this.",
+            intensity: 3,
+            writingStyle: .persuasive,
+            customInstructions: "Keep it understated."
+        )
+        try require(
+            additivePrompt.contains("Writing style: Persuasive")
+                && additivePrompt.contains("Custom preference mode: additive"),
+            "Additive custom instructions should keep the selected writing style."
+        )
+        let exclusivePrompt = RewritePromptBuilder.userPrompt(
+            text: "Please review this.",
+            intensity: 3,
+            writingStyle: .persuasive,
+            customInstructions: "Keep it understated.",
+            customInstructionsExclusive: true
+        )
+        try require(
+            exclusivePrompt.contains("Writing style: Custom instructions only")
+                && exclusivePrompt.contains("Custom preference mode: exclusive")
+                && !exclusivePrompt.contains("Writing style: Persuasive")
+                && !exclusivePrompt.contains(RewriteStyle.persuasive.promptInstruction),
+            "Exclusive custom instructions should replace the selected writing style."
+        )
         let oversized = String(
             repeating: "a",
             count: RewriteCustomInstructionsPolicy.maximumCharacters + 10
@@ -401,6 +426,25 @@ enum RewriteCoreChecks {
             presented == "hey, i did not reply earlier. Camille can review it. this is ready.",
             "Lowercase presentation should affect sentence openings while preserving source names."
         )
+        let expanded = RewriteCustomInstructionsPolicy.applyingPresentation(
+            to: "I'm ready. She’s finished. I'd rather wait. She said, \"I'm waiting.\"",
+            source: "I am ready. She has finished. I would rather wait. She said, \"I'm waiting.\"",
+            instructions: "Do not use contractions."
+        )
+        try require(
+            expanded
+                == "I am ready. She has finished. I would rather wait. She said, \"I'm waiting.\"",
+            "A no contractions preference should be guaranteed without changing quoted text."
+        )
+        let unchangedGerman = RewriteCustomInstructionsPolicy.applyingPresentation(
+            to: "Wir arbeiten im Büro. Das ist gut.",
+            source: "Wir arbeiten im Büro. Das ist gut.",
+            instructions: "Do not use contractions."
+        )
+        try require(
+            unchangedGerman == "Wir arbeiten im Büro. Das ist gut.",
+            "An English contraction preference must not alter valid words in another language."
+        )
         try require(
             RewriteOutputQualityPolicy.needsUnpersonalizedRetry(
                 source: "hey i didnt reply and itll be late",
@@ -409,6 +453,24 @@ enum RewriteCoreChecks {
                 customInstructions: "Keep it lowercase and direct."
             ),
             "An unchanged personalized output with obvious errors should receive a clean retry."
+        )
+        try require(
+            RewriteOutputQualityPolicy.needsUnpersonalizedRetry(
+                source: "hey i didnt reply and itll be late",
+                output: "Hey I didnt reply, but it will be late.",
+                intensity: 3,
+                customInstructions: "Keep it direct."
+            ),
+            "A partially corrected personalized output must retry when an obvious error remains."
+        )
+        try require(
+            !RewriteOutputQualityPolicy.needsUnpersonalizedRetry(
+                source: "Wir arbeiten im Büro.",
+                output: "Wir arbeiten im Büro.",
+                intensity: 3,
+                customInstructions: "Schreibe klar."
+            ),
+            "Valid German text must not trigger an English mechanical-error retry."
         )
         try require(
             !RewriteOutputQualityPolicy.needsUnpersonalizedRetry(
@@ -447,6 +509,14 @@ enum RewriteCoreChecks {
                 && prompt.contains("Maybe")
                 && prompt.contains("probably"),
             "The prompt must protect the exact strength of source uncertainty."
+        )
+        let correctedApostrophes = OutputFidelityValidator.evaluate(
+            source: "I cant send it now, but itll arrive tomorrow.",
+            output: "I cannot send it now, but it will arrive tomorrow."
+        )
+        try require(
+            correctedApostrophes.changedModality.isEmpty,
+            "Correcting a missing apostrophe must not look like a modal change."
         )
     }
 

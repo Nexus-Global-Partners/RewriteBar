@@ -49,6 +49,16 @@ func fidelityValidatorAllowsAHarmlessTenseModal() {
 }
 
 @Test
+func fidelityValidatorRecognizesCorrectedMissingApostrophes() {
+    let source = "I cant send it now, but itll arrive tomorrow."
+    let output = "I cannot send it now, but it will arrive tomorrow."
+
+    let report = OutputFidelityValidator.evaluate(source: source, output: output)
+
+    #expect(report.changedModality.isEmpty)
+}
+
+@Test
 func fidelityValidatorDoesNotMatchUnrelatedModalVerbs() {
     let source = "We can say the interface is faster. The rollout expands only after review."
     let output = "Say the interface is faster. The rollout will expand only after review."

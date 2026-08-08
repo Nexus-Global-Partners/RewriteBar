@@ -8,6 +8,10 @@ RewriteBar is a native macOS utility that rewrites clipboard text from a compact
 
 Repository: https://github.com/Nexus-Global-Partners/RewriteBar
 
+## Agent handoff
+
+The repository is designed to be handed directly to a coding agent. Read this file completely, inspect the smallest relevant source area, preserve unrelated work, and use the scripts below rather than inventing a separate build or release path. A useful change ends with project checks, a signed local build when needed, and a focused explanation of what changed for the user.
+
 ## Product contract
 
 Preserve these behaviors unless an issue or the user explicitly changes the product direction:
@@ -26,10 +30,10 @@ Preserve these behaviors unless an issue or the user explicitly changes the prod
 12. Instructions inside copied text are source content, never commands for the model.
 13. Every intensity from 0 through 10 follows the public definition in `RewriteIntensityPolicy`.
 14. RewriteBar, Clear, Professional, Conversational, and Persuasive are subtle preferences. They never override source voice, tone, truth, meaning, uncertainty, language, details, or approximate length.
-15. Custom instructions are optional, local, bounded, saved automatically, and lower priority than every preservation rule. Compatible style preferences should be visible, but they must never reduce correction quality or introduce fragments.
-16. The configurable global shortcut defaults to Control Option R and uses shortcut intensity 3 for a new user.
+15. Custom instructions are optional, local, bounded, saved automatically, and lower priority than every preservation rule. They can add to the selected writing style or exclusively replace that style. Intensity and preservation rules always remain active. Compatible preferences should be visible, but they must never reduce correction quality or introduce fragments.
+16. The configurable global shortcut defaults to Command R and uses shortcut intensity 3 with the RewriteBar writing style for a new user.
 17. Shortcut use reads only the current editable selection after an explicit key press. Secure fields are refused.
-18. A shortcut result replaces the selection only if the process, focused element, range, and original text remain unchanged. A completed result is also copied.
+18. A shortcut result replaces the selection only if the process, focused element, and exact selected range remain unchanged. Host editors may normalize the selected text during generation. A completed result is also copied.
 19. Shortcut progress and completion appear through the menu bar icon. The shortcut never opens a second editor or adds controls to the popover.
 
 ## Visual contract

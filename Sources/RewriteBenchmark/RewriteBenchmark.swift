@@ -25,6 +25,7 @@ private struct TrialResult: Codable {
     let caseID: String
     let title: String
     let writingStyle: String
+    let customInstructionsExclusive: Bool
     let intensity: Int
     let repetition: Int
     let input: String
@@ -145,12 +146,19 @@ private enum RewriteBenchmark {
         }
 
         let intensities: [Int]
-        if CommandLine.arguments.count == 5,
-           let requestedIntensity = Int(CommandLine.arguments[4]),
-           (0...10).contains(requestedIntensity) {
-            intensities = [requestedIntensity]
-        } else if CommandLine.arguments.count == 5 {
-            throw BenchmarkError("Intensity must be an integer from 0 through 10.")
+        if CommandLine.arguments.count == 5 {
+            let requestedValues = CommandLine.arguments[4]
+                .split(separator: ",")
+                .compactMap { Int($0) }
+            guard !requestedValues.isEmpty,
+                  requestedValues.count
+                    == CommandLine.arguments[4].split(separator: ",").count,
+                  requestedValues.allSatisfy({ (0...10).contains($0) }) else {
+                throw BenchmarkError(
+                    "Intensity must contain values from 0 through 10."
+                )
+            }
+            intensities = Array(Set(requestedValues)).sorted()
         } else {
             intensities = Array(0...10)
         }
@@ -160,6 +168,9 @@ private enum RewriteBenchmark {
         let customInstructions = ProcessInfo.processInfo.environment[
             "REWRITE_BENCHMARK_CUSTOM_INSTRUCTIONS"
         ]
+        let customInstructionsExclusive = ProcessInfo.processInfo.environment[
+            "REWRITE_BENCHMARK_CUSTOM_INSTRUCTIONS_EXCLUSIVE"
+        ] == "1" && customInstructions != nil
 
         for repetition in 1...repetitions {
             for writingStyle in styles {
@@ -172,6 +183,7 @@ private enum RewriteBenchmark {
                                 intensity: intensity,
                                 writingStyle: writingStyle,
                                 customInstructions: customInstructions,
+                                customInstructionsExclusive: customInstructionsExclusive,
                                 container: container
                             )
                             let duration = seconds(from: start, to: clock.now)
@@ -187,6 +199,7 @@ private enum RewriteBenchmark {
                                     caseID: testCase.id,
                                     title: testCase.title,
                                     writingStyle: writingStyle.rawValue,
+                                    customInstructionsExclusive: customInstructionsExclusive,
                                     intensity: intensity,
                                     repetition: repetition,
                                     input: testCase.input,
@@ -211,6 +224,7 @@ private enum RewriteBenchmark {
                                     caseID: testCase.id,
                                     title: testCase.title,
                                     writingStyle: writingStyle.rawValue,
+                                    customInstructionsExclusive: customInstructionsExclusive,
                                     intensity: intensity,
                                     repetition: repetition,
                                     input: testCase.input,
@@ -334,6 +348,7 @@ private enum RewriteBenchmark {
         intensity: Int,
         writingStyle: RewriteStyle,
         customInstructions: String?,
+        customInstructionsExclusive: Bool,
         container: ModelContainer
     ) async throws -> RewriteResult {
         let protectionEnabled = ProcessInfo.processInfo.environment[
@@ -352,6 +367,7 @@ private enum RewriteBenchmark {
                         intensity: intensity,
                         writingStyle: writingStyle,
                         customInstructions: customInstructions,
+                        customInstructionsExclusive: customInstructionsExclusive,
                         protectedTokens: protectedSource.placeholderTokens
                     )
                 )
@@ -385,8 +401,11 @@ private enum RewriteBenchmark {
                         RewritePromptBuilder.userPrompt(
                             text: protectedSource.text,
                             intensity: intensity,
-                            writingStyle: writingStyle,
+                            writingStyle: customInstructionsExclusive
+                                ? .rewriteBar
+                                : writingStyle,
                             customInstructions: nil,
+                            customInstructionsExclusive: false,
                             protectedTokens: protectedSource.placeholderTokens
                         )
                     )

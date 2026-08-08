@@ -16,7 +16,7 @@ struct GlobalShortcut: Codable, Equatable, Sendable {
 
     static let rewriteDefault = GlobalShortcut(
         keyCode: UInt32(kVK_ANSI_R),
-        modifiers: [.control, .option]
+        modifiers: [.command]
     )
 
     fileprivate var carbonModifiers: UInt32 {

@@ -49,15 +49,18 @@ final class AccessibilitySetupModel: ObservableObject {
 @MainActor
 struct SettingsView: View {
     @ObservedObject var store: RewriteSettingsStore
+    @ObservedObject var presentation: SettingsPresentationModel
 
     @State private var instructionsDraft: String
     @StateObject private var accessibility: AccessibilitySetupModel
 
     init(
         store: RewriteSettingsStore = .shared,
+        presentation: SettingsPresentationModel = SettingsPresentationModel(),
         accessibility: AccessibilitySetupModel = AccessibilitySetupModel()
     ) {
         self.store = store
+        self.presentation = presentation
         _instructionsDraft = State(initialValue: store.customInstructions)
         _accessibility = StateObject(wrappedValue: accessibility)
     }
@@ -116,8 +119,14 @@ struct SettingsView: View {
 
             Section {
                 LabeledContent("Rewrite selection") {
-                    ShortcutRecorderView(shortcut: $store.keyboardShortcut)
-                        .frame(width: 142, height: 26)
+                    HStack(spacing: 8) {
+                        ShortcutRecorderView(shortcut: $store.keyboardShortcut)
+                            .frame(width: 142, height: 26)
+
+                        if accessibility.isGranted {
+                            AccessibilityEnabledPin()
+                        }
+                    }
                 }
 
                 if let error = store.shortcutRegistrationError {
@@ -127,32 +136,26 @@ struct SettingsView: View {
                         .accessibilityLabel("Shortcut error: \(error)")
                 }
 
-                HStack(spacing: 8) {
-                    Image(
-                        systemName: accessibility.isGranted
-                            ? "checkmark.circle.fill"
-                            : "circle.dotted"
-                    )
-                    .foregroundStyle(accessibility.isGranted ? .primary : .secondary)
-                    .accessibilityHidden(true)
+                if !accessibility.isGranted {
+                    HStack(spacing: 8) {
+                        Image(systemName: "circle.dotted")
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(accessibility.isGranted ? "Ready" : "Setup needed")
-                            .foregroundStyle(accessibility.isGranted ? .primary : .secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Setup needed")
+                                .foregroundStyle(.secondary)
 
-                        Text(
-                            accessibility.isGranted
-                                ? "Selected text can be replaced."
-                                : "Allow this copy of RewriteBar in macOS Accessibility."
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
+                            Text("Allow this copy of RewriteBar in macOS Accessibility.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
 
-                    Spacer()
+                        Spacer()
 
-                    if !accessibility.isGranted {
-                        Button("Set Up") {
+                        SetupGlassButton(
+                            emphasisToken: presentation.accessibilitySetupEmphasis
+                        ) {
                             accessibility.beginSetup()
                         }
                         .accessibilityHint("Opens macOS Accessibility settings")
@@ -172,6 +175,26 @@ struct SettingsView: View {
                 Toggle("Use custom instructions", isOn: $store.customInstructionsEnabled)
                     .accessibilityHint("Applies your preferences to every rewrite")
 
+                LabeledContent("Exclusive") {
+                    HStack(spacing: 8) {
+                        Text(store.customInstructionsExclusive ? "Yes" : "No")
+                            .foregroundStyle(.secondary)
+
+                        Toggle(
+                            "Use only custom instructions for writing style",
+                            isOn: $store.customInstructionsExclusive
+                        )
+                        .labelsHidden()
+                    }
+                }
+                .disabled(!store.customInstructionsEnabled)
+                .opacity(store.customInstructionsEnabled ? 1 : 0.48)
+                .accessibilityHint(
+                    store.customInstructionsExclusive
+                        ? "The selected writing style is ignored"
+                        : "Custom instructions are added to the selected writing style"
+                )
+
                 TextEditor(text: $instructionsDraft)
                     .font(.body)
                     .frame(minHeight: 78, maxHeight: 108)
@@ -185,7 +208,7 @@ struct SettingsView: View {
                                 .font(.body)
                                 .foregroundStyle(.tertiary)
                                 .padding(.horizontal, 10)
-                                .padding(.vertical, 12)
+                                .padding(.vertical, 5)
                                 .allowsHitTesting(false)
                                 .accessibilityHidden(true)
                         }
@@ -231,7 +254,11 @@ struct SettingsView: View {
             } header: {
                 Text("Custom instructions")
             } footer: {
-                Text("Preferences can guide style, but cannot change the source meaning, facts, language, or safety rules.")
+                Text(
+                    store.customInstructionsExclusive
+                        ? "Exclusive uses only your custom instructions for style. Meaning, facts, language, intensity, and safety rules still apply."
+                        : "Custom instructions add to the selected writing style. Meaning, facts, language, intensity, and safety rules still apply."
+                )
             }
         }
         .formStyle(.grouped)
@@ -287,4 +314,112 @@ struct SettingsView: View {
         )
     }
 
+}
+
+private struct AccessibilityEnabledPin: View {
+    var body: some View {
+        Label("Enabled", systemImage: "checkmark")
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .foregroundStyle(AppPalette.deepGraphite.opacity(0.70))
+            .padding(.horizontal, 9)
+            .frame(height: 24)
+            .background {
+                ZStack {
+                    Capsule()
+                        .fill(.thinMaterial)
+
+                    Capsule()
+                        .fill(AppPalette.silver.opacity(0.22))
+
+                    Capsule()
+                        .strokeBorder(.white.opacity(0.70), lineWidth: 0.6)
+
+                    Capsule()
+                        .strokeBorder(
+                            AppPalette.graphite.opacity(0.08),
+                            lineWidth: 0.6
+                        )
+                }
+            }
+            .accessibilityLabel("Keyboard shortcut enabled")
+    }
+}
+
+private struct SetupGlassButton: View {
+    let emphasisToken: Int
+    let action: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var emphasisStrength = 0.0
+    @State private var emphasisTask: Task<Void, Never>?
+
+    var body: some View {
+        Button(action: action) {
+            Text("Set Up")
+                .font(.system(.body, design: .rounded, weight: .medium))
+                .foregroundStyle(AppPalette.deepGraphite)
+                .padding(.horizontal, 13)
+                .frame(height: 28)
+                .background {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(.regularMaterial)
+
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(.white.opacity(0.62 + (0.22 * emphasisStrength)))
+
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(
+                                .white.opacity(0.88 + (0.12 * emphasisStrength)),
+                                lineWidth: 0.8
+                            )
+
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(
+                                AppPalette.graphite.opacity(0.10),
+                                lineWidth: 0.7
+                            )
+                    }
+                    .shadow(
+                        color: AppPalette.graphite.opacity(0.12 + (0.08 * emphasisStrength)),
+                        radius: 4 + (3 * emphasisStrength),
+                        y: 2
+                    )
+                }
+                .scaleEffect(1 + (0.045 * emphasisStrength))
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onChange(of: emphasisToken) { _, _ in
+            emphasize()
+        }
+        .onDisappear {
+            emphasisTask?.cancel()
+        }
+    }
+
+    private func emphasize() {
+        emphasisTask?.cancel()
+
+        if reduceMotion {
+            emphasisStrength = 1
+            emphasisTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(450))
+                guard !Task.isCancelled else { return }
+                emphasisStrength = 0
+            }
+            return
+        }
+
+        withAnimation(.easeOut(duration: 0.12)) {
+            emphasisStrength = 1
+        }
+        emphasisTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(180))
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.72)) {
+                emphasisStrength = 0
+            }
+        }
+    }
 }

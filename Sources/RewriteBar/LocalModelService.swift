@@ -120,6 +120,7 @@ actor LocalModelService {
         intensity: Int,
         writingStyle: RewriteStyle = .rewriteBar,
         customInstructions: String? = nil,
+        customInstructionsExclusive: Bool = false,
         onProgress: (@Sendable (Int) async -> Void)? = nil
     ) async throws -> String {
         try await prepareModel()
@@ -134,6 +135,7 @@ actor LocalModelService {
                     intensity: intensity,
                     writingStyle: writingStyle,
                     customInstructions: customInstructions,
+                    customInstructionsExclusive: customInstructionsExclusive,
                     protectedTokens: protectedSource.placeholderTokens
                 )
             },
@@ -157,8 +159,11 @@ actor LocalModelService {
                 RewritePromptBuilder.userPrompt(
                     text: protectedSource.text,
                     intensity: intensity,
-                    writingStyle: writingStyle,
+                    writingStyle: customInstructionsExclusive
+                        ? .rewriteBar
+                        : writingStyle,
                     customInstructions: nil,
+                    customInstructionsExclusive: false,
                     protectedTokens: protectedSource.placeholderTokens
                 )
             },
@@ -175,6 +180,7 @@ actor LocalModelService {
             intensity: request.intensity,
             writingStyle: request.writingStyle,
             customInstructions: request.customInstructions,
+            customInstructionsExclusive: request.customInstructionsExclusive,
             onProgress: onProgress
         )
     }

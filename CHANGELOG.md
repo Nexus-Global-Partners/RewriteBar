@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.1
+
+* Uses Command R by default and replaces selections reliably in editors that normalize selected text while the model works.
+* Lets custom instructions either add to the selected writing style or become the only added style direction.
+* Enforces requests to avoid contractions after generation while preserving exact quoted passages.
+* Makes Accessibility setup easier to notice and condenses the enabled state into a quiet status pin.
+* Aligns the custom instruction placeholder with the native text cursor.
+* Expands the standard suite and real model benchmark coverage for personalization, fidelity, styles, intensity, and latency.
+
 ## 1.3.0
 
 * Gives every intensity from 0 through 10 an explicit rewrite contract, from strict proofreading to full transformation.

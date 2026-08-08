@@ -13,12 +13,15 @@ func settingsUseProductDefaultsAndPersistChanges() throws {
     #expect(store.defaultIntensity == 3)
     #expect(store.writingStyle == .rewriteBar)
     #expect(store.keyboardShortcut == .rewriteDefault)
+    #expect(store.keyboardShortcut?.displayName == "⌘R")
     #expect(!store.customInstructionsEnabled)
+    #expect(!store.customInstructionsExclusive)
 
     store.defaultIntensity = 14
     store.writingStyle = .clear
     store.keyboardShortcut = nil
     store.customInstructionsEnabled = true
+    store.customInstructionsExclusive = true
     store.saveCustomInstructions("  Keep it direct.  ")
 
     let reloaded = RewriteSettingsStore(defaults: defaults)
@@ -26,7 +29,36 @@ func settingsUseProductDefaultsAndPersistChanges() throws {
     #expect(reloaded.writingStyle == .clear)
     #expect(reloaded.keyboardShortcut == nil)
     #expect(reloaded.customInstructionsEnabled)
+    #expect(reloaded.customInstructionsExclusive)
     #expect(reloaded.customInstructions == "Keep it direct.")
+
+    reloaded.resetCustomInstructions()
+    #expect(!reloaded.customInstructionsEnabled)
+    #expect(!reloaded.customInstructionsExclusive)
+}
+
+@Test @MainActor
+func selectionContinuityUsesTheStableRange() {
+    let original = CFRange(location: 42, length: 18)
+
+    #expect(
+        AccessibilitySelectionClient.selectionRangeIsUnchanged(
+            original: original,
+            current: CFRange(location: 42, length: 18)
+        )
+    )
+    #expect(
+        !AccessibilitySelectionClient.selectionRangeIsUnchanged(
+            original: original,
+            current: CFRange(location: 42, length: 17)
+        )
+    )
+    #expect(
+        !AccessibilitySelectionClient.selectionRangeIsUnchanged(
+            original: original,
+            current: CFRange(location: 43, length: 18)
+        )
+    )
 }
 
 @Test @MainActor

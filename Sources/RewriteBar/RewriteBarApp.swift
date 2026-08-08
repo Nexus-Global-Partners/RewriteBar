@@ -196,6 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             customInstructions: settings.customInstructionsEnabled
                 ? settings.customInstructions
                 : nil,
+            customInstructionsExclusive: settings.customInstructionsExclusive,
             promptingForPermission: false
         )
     }
@@ -226,7 +227,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         )
 
         if failure == .permissionRequired {
-            SettingsWindowController.shared.show()
+            SettingsWindowController.shared.show(
+                emphasizeAccessibilitySetup: true
+            )
         }
     }
 
