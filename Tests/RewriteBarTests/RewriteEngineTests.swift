@@ -50,6 +50,47 @@ func exclusiveCustomInstructionsReplaceTheSelectedWritingStyle() {
 }
 
 @Test
+func noContractionsPreferenceIsAppliedDeterministically() {
+    let output = RewriteCustomInstructionsPolicy.applyingPresentation(
+        to: "I'm ready. She’s finished. I'd rather wait. She said, \"I'm waiting.\"",
+        source: "I am ready. She has finished. I would rather wait. She said, \"I'm waiting.\"",
+        instructions: "Do not use contractions."
+    )
+
+    #expect(
+        output
+            == "I am ready. She has finished. I would rather wait. She said, \"I'm waiting.\""
+    )
+
+    let germanOutput = RewriteCustomInstructionsPolicy.applyingPresentation(
+        to: "Wir arbeiten im Büro. Das ist gut.",
+        source: "Wir arbeiten im Büro. Das ist gut.",
+        instructions: "Do not use contractions."
+    )
+    #expect(germanOutput == "Wir arbeiten im Büro. Das ist gut.")
+}
+
+@Test
+func personalizedOutputRetriesWhenAnyObviousMechanicalErrorRemains() {
+    #expect(
+        RewriteOutputQualityPolicy.needsUnpersonalizedRetry(
+            source: "hey i didnt reply and itll be late",
+            output: "Hey I didnt reply, but it will be late.",
+            intensity: 3,
+            customInstructions: "Keep it direct."
+        )
+    )
+    #expect(
+        !RewriteOutputQualityPolicy.needsUnpersonalizedRetry(
+            source: "Wir arbeiten im Büro.",
+            output: "Wir arbeiten im Büro.",
+            intensity: 3,
+            customInstructions: "Schreibe klar."
+        )
+    )
+}
+
+@Test
 func engineReturnsGeneratorOutput() async throws {
     let generator = GeneratorStub(output: "Rewritten")
     let engine = RewriteEngine(

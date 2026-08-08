@@ -114,6 +114,7 @@ public enum RewriteCustomInstructionsPolicy {
         public let modelInstructions: String?
         public let acceptanceCues: [String]
         public let lowercaseSentenceStarts: Bool
+        public let avoidsContractions: Bool
     }
 
     public static func normalized(_ instructions: String?) -> String? {
@@ -135,7 +136,8 @@ public enum RewriteCustomInstructionsPolicy {
                 originalInstructions: nil,
                 modelInstructions: nil,
                 acceptanceCues: [],
-                lowercaseSentenceStarts: false
+                lowercaseSentenceStarts: false,
+                avoidsContractions: false
             )
         }
 
@@ -144,6 +146,12 @@ public enum RewriteCustomInstructionsPolicy {
             || lowered.contains("lower case")
             || lowered.contains("do not capitalize sentence")
             || lowered.contains("don't capitalize sentence")
+        let avoidsContractions = lowered.contains("avoid contractions")
+            || lowered.contains("never use contractions")
+            || lowered.contains("no contractions")
+            || lowered.contains("do not use contractions")
+            || lowered.contains("don't use contractions")
+            || lowered.contains("without contractions")
         let modelInstructions: String?
         if lowercaseSentenceStarts {
             let retainedClauses = normalized
@@ -182,7 +190,10 @@ public enum RewriteCustomInstructionsPolicy {
         }
         if lowered.contains("avoid contractions")
             || lowered.contains("never use contractions")
-            || lowered.contains("no contractions") {
+            || lowered.contains("no contractions")
+            || lowered.contains("do not use contractions")
+            || lowered.contains("don't use contractions")
+            || lowered.contains("without contractions") {
             cues.append("Use no contractions.")
         } else if lowered.contains("use contractions")
                     || lowered.contains("contractions where natural") {
@@ -211,7 +222,8 @@ public enum RewriteCustomInstructionsPolicy {
             originalInstructions: normalized,
             modelInstructions: modelInstructions,
             acceptanceCues: cues,
-            lowercaseSentenceStarts: lowercaseSentenceStarts
+            lowercaseSentenceStarts: lowercaseSentenceStarts,
+            avoidsContractions: avoidsContractions
         )
     }
 
@@ -258,13 +270,24 @@ public enum RewriteCustomInstructionsPolicy {
         instructions: String?
     ) -> String {
         let plan = executionPlan(instructions)
-        guard plan.lowercaseSentenceStarts else { return output }
+        let protectedPassages = protectingQuotedPassages(
+            in: output,
+            from: source
+        )
+        var result = plan.avoidsContractions
+            ? expandingContractions(
+                in: protectedPassages.text,
+                source: source
+            )
+            : protectedPassages.text
+        guard plan.lowercaseSentenceStarts else {
+            return protectedPassages.restoring(in: result)
+        }
 
         let pattern = #"(?m)(^|[.!?]\s+)([\p{Lu}])([\p{L}’']*)"#
         guard let expression = try? NSRegularExpression(pattern: pattern) else {
-            return output
+            return result
         }
-        var result = output
         let matches = expression.matches(
             in: result,
             range: NSRange(result.startIndex..<result.endIndex, in: result)
@@ -285,12 +308,230 @@ public enum RewriteCustomInstructionsPolicy {
             with: "i",
             options: .regularExpression
         )
+        return protectedPassages.restoring(in: result)
+    }
+
+    private static func expandingContractions(
+        in value: String,
+        source: String
+    ) -> String {
+        let replacements = [
+            ("can't", "cannot"), ("couldn't", "could not"),
+            ("wouldn't", "would not"), ("shouldn't", "should not"),
+            ("won't", "will not"), ("mustn't", "must not"),
+            ("isn't", "is not"), ("aren't", "are not"),
+            ("wasn't", "was not"), ("weren't", "were not"),
+            ("hasn't", "has not"), ("haven't", "have not"),
+            ("hadn't", "had not"), ("doesn't", "does not"),
+            ("don't", "do not"), ("didn't", "did not"),
+            ("i'm", "i am"), ("you're", "you are"),
+            ("we're", "we are"), ("they're", "they are"),
+            ("i've", "i have"), ("you've", "you have"),
+            ("we've", "we have"), ("they've", "they have"),
+            ("i'll", "i will"), ("you'll", "you will"),
+            ("he'll", "he will"), ("she'll", "she will"),
+            ("it'll", "it will"), ("we'll", "we will"),
+            ("they'll", "they will"), ("let's", "let us"),
+            ("what's", "what is"), ("here's", "here is"),
+            ("where's", "where is"), ("how's", "how is")
+        ]
+        var result = value
+
+        for (contraction, expansion) in replacements {
+            let apostrophePattern = NSRegularExpression.escapedPattern(
+                for: contraction
+            ).replacingOccurrences(of: "'", with: "['’]")
+            guard let expression = try? NSRegularExpression(
+                pattern: #"\b"# + apostrophePattern + #"\b"#,
+                options: .caseInsensitive
+            ) else {
+                continue
+            }
+            let matches = expression.matches(
+                in: result,
+                range: NSRange(result.startIndex..<result.endIndex, in: result)
+            )
+            for match in matches.reversed() {
+                guard let range = Range(match.range, in: result) else {
+                    continue
+                }
+                let matched = result[range]
+                let replacement = matched.first?.isUppercase == true
+                    ? expansion.prefix(1).uppercased() + expansion.dropFirst()
+                    : expansion
+                result.replaceSubrange(range, with: replacement)
+            }
+        }
+        result = expandingAmbiguousSContractions(in: result, source: source)
+        return expandingAmbiguousDContractions(in: result, source: source)
+    }
+
+    private static func expandingAmbiguousSContractions(
+        in value: String,
+        source: String
+    ) -> String {
+        let pattern = #"\b(he|she|it|that|there)['’]s\b(?:\s+([\p{L}]+))?"#
+        guard let expression = try? NSRegularExpression(
+            pattern: pattern,
+            options: .caseInsensitive
+        ) else {
+            return value
+        }
+
+        var result = value
+        let matches = expression.matches(
+            in: result,
+            range: NSRange(result.startIndex..<result.endIndex, in: result)
+        )
+        let likelyPerfectParticiples: Set<String> = [
+            "been", "begun", "become", "come", "done", "found", "gone",
+            "heard", "kept", "left", "lost", "made", "read", "received",
+            "said", "seen", "sent", "set", "taken", "told", "written", "won"
+        ]
+        let loweredSource = source.lowercased()
+
+        for match in matches.reversed() {
+            guard let range = Range(match.range, in: result),
+                  let subjectRange = Range(match.range(at: 1), in: result) else {
+                continue
+            }
+            let subject = result[subjectRange].lowercased()
+            let nextWord: String
+            if match.range(at: 2).location != NSNotFound,
+               let nextRange = Range(match.range(at: 2), in: result) {
+                nextWord = result[nextRange].lowercased()
+            } else {
+                nextWord = ""
+            }
+            let sourceUsesHas = loweredSource.contains("\(subject) has \(nextWord)")
+            let sourceUsesIs = loweredSource.contains("\(subject) is \(nextWord)")
+            let auxiliary = sourceUsesHas || (
+                !sourceUsesIs && likelyPerfectParticiples.contains(nextWord)
+            ) ? "has" : "is"
+            let originalSubject = result[subjectRange]
+            let replacementSubject = originalSubject.first?.isUppercase == true
+                ? subject.prefix(1).uppercased() + subject.dropFirst()
+                : String(subject)
+            let matched = result[range]
+            let suffix = matched.firstIndex(where: { $0.isWhitespace })
+                .map { String(matched[$0...]) }
+                ?? ""
+            result.replaceSubrange(
+                range,
+                with: "\(replacementSubject) \(auxiliary)\(suffix)"
+            )
+        }
         return result
+    }
+
+    private static func expandingAmbiguousDContractions(
+        in value: String,
+        source: String
+    ) -> String {
+        let pattern = #"\b(i|you|he|she|we|they)['’]d\b(?:\s+([\p{L}]+))?"#
+        guard let expression = try? NSRegularExpression(
+            pattern: pattern,
+            options: .caseInsensitive
+        ) else {
+            return value
+        }
+
+        var result = value
+        let matches = expression.matches(
+            in: result,
+            range: NSRange(result.startIndex..<result.endIndex, in: result)
+        )
+        let likelyPastParticiples: Set<String> = [
+            "been", "begun", "become", "come", "done", "found", "gone",
+            "heard", "kept", "left", "lost", "made", "read", "received",
+            "said", "seen", "sent", "set", "taken", "told", "written", "won"
+        ]
+        let loweredSource = source.lowercased()
+
+        for match in matches.reversed() {
+            guard let range = Range(match.range, in: result),
+                  let subjectRange = Range(match.range(at: 1), in: result) else {
+                continue
+            }
+            let subject = result[subjectRange].lowercased()
+            let nextWord: String
+            if match.range(at: 2).location != NSNotFound,
+               let nextRange = Range(match.range(at: 2), in: result) {
+                nextWord = result[nextRange].lowercased()
+            } else {
+                nextWord = ""
+            }
+            let sourceUsesHad = loweredSource.contains("\(subject) had \(nextWord)")
+            let sourceUsesWould = loweredSource.contains("\(subject) would \(nextWord)")
+            let auxiliary = sourceUsesHad || (
+                !sourceUsesWould && likelyPastParticiples.contains(nextWord)
+            ) ? "had" : "would"
+            let originalSubject = result[subjectRange]
+            let replacementSubject = originalSubject.first?.isUppercase == true
+                ? subject.prefix(1).uppercased() + subject.dropFirst()
+                : String(subject)
+            let matched = result[range]
+            let suffix = matched.firstIndex(where: { $0.isWhitespace })
+                .map { String(matched[$0...]) }
+                ?? ""
+            result.replaceSubrange(
+                range,
+                with: "\(replacementSubject) \(auxiliary)\(suffix)"
+            )
+        }
+        return result
+    }
+
+    private struct ProtectedPassages {
+        let text: String
+        let replacements: [String: String]
+
+        func restoring(in candidate: String) -> String {
+            replacements.reduce(candidate) { partial, replacement in
+                partial.replacingOccurrences(
+                    of: replacement.key,
+                    with: replacement.value
+                )
+            }
+        }
+    }
+
+    private static func protectingQuotedPassages(
+        in output: String,
+        from source: String
+    ) -> ProtectedPassages {
+        let pattern = #"\"[^\"\n]*\"|“[^”\n]*”|‘[^’\n]*’"#
+        guard let expression = try? NSRegularExpression(pattern: pattern) else {
+            return ProtectedPassages(text: output, replacements: [:])
+        }
+        let matches = expression.matches(
+            in: source,
+            range: NSRange(source.startIndex..<source.endIndex, in: source)
+        )
+        let passages = Set(matches.compactMap { match -> String? in
+            guard let range = Range(match.range, in: source) else { return nil }
+            return String(source[range])
+        }).sorted { $0.count > $1.count }
+
+        var protectedOutput = output
+        var replacements: [String: String] = [:]
+        for passage in passages where protectedOutput.contains(passage) {
+            let token = "0ZXQQUOTED\(replacements.count + 1)QXZ"
+            protectedOutput = protectedOutput.replacingOccurrences(
+                of: passage,
+                with: token
+            )
+            replacements[token] = passage
+        }
+        return ProtectedPassages(
+            text: protectedOutput,
+            replacements: replacements
+        )
     }
 }
 
 public enum RewriteOutputQualityPolicy {
-    private static let obviousMechanicalIssuePattern = #"(?i)\b(didnt|ive|itll|thats|doesnt|dont|cant|wont|isnt|arent|wasnt|werent|couldnt|wouldnt|shouldnt|im|youre|theyre|weve|youve)\b|\blonger\s+then\b"#
+    private static let obviousMechanicalIssuePattern = #"(?i)\b(didnt|ive|itll|thats|doesnt|dont|cant|wont|isnt|arent|wasnt|werent|couldnt|wouldnt|shouldnt|youre|theyre|weve|youve)\b|\bim\b(?=\s+(sorry|not|really|very|going|trying|working|happy|sure|ready|available|busy|late|early|done|waiting|sending|looking|thinking|planning|writing|asking|following|hoping|glad|afraid)\b)|\blonger\s+then\b"#
     private static let introducedFragmentPattern = #"(?i)(^|[.!?]\s+)(especially|especialmente|notamment),\s+(who|what|when|where|which|quién|qué|cuándo|dónde|qui|que|quand|où)\b"#
 
     public static func needsUnpersonalizedRetry(
@@ -303,9 +544,8 @@ public enum RewriteOutputQualityPolicy {
               RewriteIntensityPolicy.clampedLevel(intensity) >= 1 else {
             return false
         }
-        let unchangedWithErrors = containsObviousMechanicalIssue(source)
+        let retainedMechanicalErrors = containsObviousMechanicalIssue(source)
             && containsObviousMechanicalIssue(output)
-            && normalizedWords(source) == normalizedWords(output)
         let introducedFragment = output.range(
             of: introducedFragmentPattern,
             options: .regularExpression
@@ -313,7 +553,7 @@ public enum RewriteOutputQualityPolicy {
             of: introducedFragmentPattern,
             options: .regularExpression
         ) == nil
-        return unchangedWithErrors || introducedFragment
+        return retainedMechanicalErrors || introducedFragment
     }
 
     private static func containsObviousMechanicalIssue(_ value: String) -> Bool {
@@ -323,11 +563,6 @@ public enum RewriteOutputQualityPolicy {
         ) != nil
     }
 
-    private static func normalizedWords(_ value: String) -> [String] {
-        value.lowercased()
-            .split { !$0.isLetter && !$0.isNumber }
-            .map(String.init)
-    }
 }
 
 public enum RewriteFidelityPolicy {

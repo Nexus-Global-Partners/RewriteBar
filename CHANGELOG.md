@@ -1,14 +1,21 @@
 # Changelog
 
+## 1.3.1
+
+* Uses Command R by default and replaces selections reliably in editors that normalize selected text while the model works.
+* Lets custom instructions either add to the selected writing style or become the only added style direction.
+* Enforces requests to avoid contractions after generation while preserving exact quoted passages.
+* Makes Accessibility setup easier to notice and condenses the enabled state into a quiet status pin.
+* Aligns the custom instruction placeholder with the native text cursor.
+* Expands the standard suite and real model benchmark coverage for personalization, fidelity, styles, intensity, and latency.
+
 ## 1.3.0
 
 * Gives every intensity from 0 through 10 an explicit rewrite contract, from strict proofreading to full transformation.
 * Adds five faithful writing styles: RewriteBar, Clear, Professional, Conversational, and Persuasive.
 * Adds a configurable global shortcut that rewrites selected editable text and copies the result without leaving the current app.
-* Uses Command R by default and replaces selections reliably in editors that normalize selected text while the model works.
 * Adds a native Settings window for shortcut intensity, writing style, keyboard shortcut, Accessibility access, and optional custom instructions.
 * Saves custom instructions automatically and turns common writing preferences into explicit model acceptance cues.
-* Lets custom instructions either add to the selected writing style or become the only added style direction.
 * Separates lowercase presentation from generation so spelling, grammar, punctuation, and sentence boundaries remain fully corrected.
 * Retries safely without personalization when a preference causes an unchanged draft with obvious errors or introduces a sentence fragment.
 * Adds a quiet Settings control inside the existing action surface without changing the popover height.
@@ -22,7 +29,7 @@
 * Refreshes stale Accessibility records created by older local builds before macOS asks for access to the current app.
 * Closes the macOS Accessibility alert automatically once RewriteBar reports that access is ready.
 * Shows a temporary Dock icon while Settings is open so the window remains easy to return to.
-* Adds a standard 30 test suite and expands the model benchmark across every intensity, five styles, custom instructions, fidelity, and latency.
+* Adds a standard 25 test suite and expands the model benchmark across every intensity, five styles, custom instructions, fidelity, and latency.
 * Documents RewriteBar as an experiment in focused, local software that augments existing keyboard workflows.
 
 ## 1.2.7
