@@ -53,6 +53,7 @@ struct SettingsView: View {
 
     @State private var instructionsDraft: String
     @StateObject private var accessibility: AccessibilitySetupModel
+    @Environment(\.colorScheme) private var colorScheme
 
     init(
         store: RewriteSettingsStore = .shared,
@@ -115,6 +116,7 @@ struct SettingsView: View {
                 Text("Rewrite")
             } footer: {
                 Text("The slider in the menu bar still lets you change intensity for each rewrite.")
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -169,6 +171,7 @@ struct SettingsView: View {
                         ? "Select editable text, then press the shortcut. The result replaces the selection and is copied."
                         : "Set Up refreshes any older RewriteBar permission, then macOS asks you to allow this copy."
                 )
+                .foregroundStyle(.secondary)
             }
 
             Section {
@@ -200,7 +203,19 @@ struct SettingsView: View {
                     .frame(minHeight: 78, maxHeight: 108)
                     .padding(5)
                     .scrollContentBackground(.hidden)
-                    .background(Color(nsColor: .textBackgroundColor).opacity(0.72))
+                    .background {
+                        ZStack {
+                            Rectangle()
+                                .fill(.thinMaterial)
+
+                            Rectangle()
+                                .fill(
+                                    colorScheme == .dark
+                                        ? Color.black.opacity(0.26)
+                                        : Color(nsColor: .textBackgroundColor).opacity(0.72)
+                                )
+                        }
+                    }
                     .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                     .overlay(alignment: .topLeading) {
                         if instructionsDraft.isEmpty {
@@ -259,10 +274,16 @@ struct SettingsView: View {
                         ? "Exclusive uses only your custom instructions for style. Meaning, facts, language, intensity, and safety rules still apply."
                         : "Custom instructions add to the selected writing style. Meaning, facts, language, intensity, and safety rules still apply."
                 )
+                .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .tint(AppPalette.graphite)
+        .foregroundStyle(AppPalette.settingsPrimaryText(for: colorScheme))
+        .tint(
+            colorScheme == .dark
+                ? Color.white.opacity(0.58)
+                : AppPalette.graphite
+        )
         .scrollContentBackground(.hidden)
         .background {
             AppGlassBackground(neutralSurfaceOpacity: 0.90)
@@ -285,9 +306,17 @@ struct SettingsView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
             .background {
-                Rectangle()
-                    .fill(.thinMaterial)
-                    .overlay(AppPalette.frost.opacity(0.16))
+                ZStack {
+                    Rectangle()
+                        .fill(.thinMaterial)
+
+                    Rectangle()
+                        .fill(
+                            colorScheme == .dark
+                                ? Color.black.opacity(0.38)
+                                : AppPalette.frost.opacity(0.16)
+                        )
+                }
             }
             .overlay(alignment: .top) { Divider() }
         }
@@ -317,10 +346,16 @@ struct SettingsView: View {
 }
 
 private struct AccessibilityEnabledPin: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         Label("Enabled", systemImage: "checkmark")
             .font(.system(size: 11, weight: .medium, design: .rounded))
-            .foregroundStyle(AppPalette.deepGraphite.opacity(0.70))
+            .foregroundStyle(
+                colorScheme == .dark
+                    ? Color.white.opacity(0.66)
+                    : AppPalette.deepGraphite.opacity(0.70)
+            )
             .padding(.horizontal, 9)
             .frame(height: 24)
             .background {
@@ -329,10 +364,17 @@ private struct AccessibilityEnabledPin: View {
                         .fill(.thinMaterial)
 
                     Capsule()
-                        .fill(AppPalette.silver.opacity(0.22))
+                        .fill(
+                            colorScheme == .dark
+                                ? Color.black.opacity(0.20)
+                                : AppPalette.silver.opacity(0.22)
+                        )
 
                     Capsule()
-                        .strokeBorder(.white.opacity(0.70), lineWidth: 0.6)
+                        .strokeBorder(
+                            .white.opacity(colorScheme == .dark ? 0.12 : 0.70),
+                            lineWidth: 0.6
+                        )
 
                     Capsule()
                         .strokeBorder(
@@ -350,6 +392,7 @@ private struct SetupGlassButton: View {
     let action: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     @State private var emphasisStrength = 0.0
     @State private var emphasisTask: Task<Void, Never>?
 
@@ -357,20 +400,42 @@ private struct SetupGlassButton: View {
         Button(action: action) {
             Text("Set Up")
                 .font(.system(.body, design: .rounded, weight: .medium))
-                .foregroundStyle(AppPalette.deepGraphite)
+                .foregroundStyle(AppPalette.settingsControlText(for: colorScheme))
                 .padding(.horizontal, 13)
                 .frame(height: 28)
                 .background {
                     ZStack {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(.regularMaterial)
+                            .fill(.thinMaterial)
 
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(.white.opacity(0.62 + (0.22 * emphasisStrength)))
+                            .fill(
+                                colorScheme == .dark
+                                    ? Color.black.opacity(0.18 - (0.06 * emphasisStrength))
+                                    : Color.white.opacity(0.62 + (0.22 * emphasisStrength))
+                            )
+
+                        if colorScheme == .dark {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            .white.opacity(0.085 + (0.04 * emphasisStrength)),
+                                            .white.opacity(0.012)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                        }
 
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(
-                                .white.opacity(0.88 + (0.12 * emphasisStrength)),
+                                .white.opacity(
+                                    colorScheme == .dark
+                                        ? 0.14 + (0.08 * emphasisStrength)
+                                        : 0.88 + (0.12 * emphasisStrength)
+                                ),
                                 lineWidth: 0.8
                             )
 
@@ -381,7 +446,9 @@ private struct SetupGlassButton: View {
                             )
                     }
                     .shadow(
-                        color: AppPalette.graphite.opacity(0.12 + (0.08 * emphasisStrength)),
+                        color: colorScheme == .dark
+                            ? Color.black.opacity(0.30 + (0.08 * emphasisStrength))
+                            : AppPalette.graphite.opacity(0.12 + (0.08 * emphasisStrength)),
                         radius: 4 + (3 * emphasisStrength),
                         y: 2
                     )
