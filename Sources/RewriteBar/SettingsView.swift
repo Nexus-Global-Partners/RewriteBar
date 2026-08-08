@@ -346,16 +346,10 @@ struct SettingsView: View {
 }
 
 private struct AccessibilityEnabledPin: View {
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
         Label("Enabled", systemImage: "checkmark")
             .font(.system(size: 11, weight: .medium, design: .rounded))
-            .foregroundStyle(
-                colorScheme == .dark
-                    ? Color.white.opacity(0.66)
-                    : AppPalette.deepGraphite.opacity(0.70)
-            )
+            .foregroundStyle(AppPalette.settingsEnabledText)
             .padding(.horizontal, 9)
             .frame(height: 24)
             .background {
@@ -364,22 +358,12 @@ private struct AccessibilityEnabledPin: View {
                         .fill(.thinMaterial)
 
                     Capsule()
-                        .fill(
-                            colorScheme == .dark
-                                ? Color.black.opacity(0.20)
-                                : AppPalette.silver.opacity(0.22)
-                        )
+                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.30))
 
                     Capsule()
                         .strokeBorder(
-                            .white.opacity(colorScheme == .dark ? 0.12 : 0.70),
-                            lineWidth: 0.6
-                        )
-
-                    Capsule()
-                        .strokeBorder(
-                            AppPalette.graphite.opacity(0.08),
-                            lineWidth: 0.6
+                            Color(nsColor: .labelColor).opacity(0.16),
+                            lineWidth: 0.7
                         )
                 }
             }

@@ -1,7 +1,39 @@
+import AppKit
 import Foundation
 import RewriteCore
+import SwiftUI
 import Testing
 @testable import RewriteBar
+
+@Test @MainActor
+func settingsEnabledStatusAdaptsToLightAndDarkAppearances() throws {
+    let lightAppearance = try #require(NSAppearance(named: .aqua))
+    let darkAppearance = try #require(NSAppearance(named: .darkAqua))
+
+    var resolvedLightColor: NSColor?
+    lightAppearance.performAsCurrentDrawingAppearance {
+        resolvedLightColor = NSColor(AppPalette.settingsEnabledText)
+            .usingColorSpace(.deviceRGB)
+    }
+
+    var resolvedDarkColor: NSColor?
+    darkAppearance.performAsCurrentDrawingAppearance {
+        resolvedDarkColor = NSColor(AppPalette.settingsEnabledText)
+            .usingColorSpace(.deviceRGB)
+    }
+
+    let lightColor = try #require(resolvedLightColor)
+    let darkColor = try #require(resolvedDarkColor)
+
+    #expect(lightColor.redComponent < 0.15)
+    #expect(lightColor.greenComponent < 0.15)
+    #expect(lightColor.blueComponent < 0.15)
+    #expect(darkColor.redComponent > 0.85)
+    #expect(darkColor.greenComponent > 0.85)
+    #expect(darkColor.blueComponent > 0.85)
+    #expect(lightColor.alphaComponent > 0.60)
+    #expect(darkColor.alphaComponent > 0.60)
+}
 
 @Test @MainActor
 func settingsUseProductDefaultsAndPersistChanges() throws {
