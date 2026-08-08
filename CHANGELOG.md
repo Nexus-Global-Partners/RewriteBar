@@ -3,6 +3,8 @@
 ## 1.3.1
 
 * Uses Command R by default and replaces selections reliably in editors that normalize selected text while the model works.
+* Rewrites selections in editors that expose an editable plain text value instead of a directly writable selected text attribute.
+* Keeps shortcut failures quiet by removing the system alert sound while retaining visible menu bar feedback.
 * Lets custom instructions either add to the selected writing style or become the only added style direction.
 * Enforces requests to avoid contractions after generation while preserving exact quoted passages.
 * Makes Accessibility setup easier to notice and condenses the enabled state into a quiet status pin.

@@ -216,10 +216,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     private func showShortcutFailure(_ failure: AccessibilityRewriteFailure) {
-        logger.notice(
+        logger.error(
             "Shortcut rewrite unavailable: \(failure.localizedDescription, privacy: .public)"
         )
-        NSSound.beep()
         showTemporaryStatus(
             title: "!",
             toolTip: failure.localizedDescription,

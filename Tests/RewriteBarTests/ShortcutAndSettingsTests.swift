@@ -62,6 +62,75 @@ func selectionContinuityUsesTheStableRange() {
 }
 
 @Test @MainActor
+func accessibilityRangeHelpersUseUTF16Offsets() {
+    let value = "Start 👋 selected text end"
+    let selected = "selected text"
+    let location = (value as NSString).range(of: selected).location
+    let range = CFRange(location: location, length: (selected as NSString).length)
+
+    #expect(AccessibilitySelectionClient.text(in: value, range: range) == selected)
+    #expect(
+        AccessibilitySelectionClient.replacingText(
+            in: value,
+            range: range,
+            with: "rewritten"
+        ) == "Start 👋 rewritten end"
+    )
+}
+
+@Test @MainActor
+func accessibilityRangeHelpersRejectInvalidEditorRanges() {
+    let value = "Short value"
+
+    #expect(
+        AccessibilitySelectionClient.text(
+            in: value,
+            range: CFRange(location: 40, length: 2)
+        ) == nil
+    )
+    #expect(
+        AccessibilitySelectionClient.replacingText(
+            in: value,
+            range: CFRange(location: -1, length: 2),
+            with: "No"
+        ) == nil
+    )
+}
+
+@Test @MainActor
+func accessibilitySelectionPlanFallsBackToTheEditablePlainTextValue() throws {
+    let fullText = "Before selected after"
+    let selectedRange = CFRange(location: 7, length: 8)
+    let plan = try AccessibilitySelectionClient.selectionPlan(
+        selectedText: "selected",
+        selectedTextIsSettable: false,
+        fullText: fullText,
+        fullTextIsSettable: true,
+        range: selectedRange
+    )
+
+    #expect(plan.text == "selected")
+    #expect(
+        plan.replacementStrategy
+            == .plainTextValue(originalValue: fullText)
+    )
+}
+
+@Test @MainActor
+func accessibilitySelectionPlanPrefersDirectSelectionReplacement() throws {
+    let plan = try AccessibilitySelectionClient.selectionPlan(
+        selectedText: "selected",
+        selectedTextIsSettable: true,
+        fullText: "Before selected after",
+        fullTextIsSettable: true,
+        range: CFRange(location: 7, length: 8)
+    )
+
+    #expect(plan.text == "selected")
+    #expect(plan.replacementStrategy == .selectedText)
+}
+
+@Test @MainActor
 func accessibilitySetupRefreshesWhenMacOSGrantsAccess() {
     let state = AccessibilityPermissionState()
     let model = AccessibilitySetupModel(
