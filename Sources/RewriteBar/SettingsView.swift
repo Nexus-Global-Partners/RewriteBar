@@ -119,8 +119,14 @@ struct SettingsView: View {
 
             Section {
                 LabeledContent("Rewrite selection") {
-                    ShortcutRecorderView(shortcut: $store.keyboardShortcut)
-                        .frame(width: 142, height: 26)
+                    HStack(spacing: 8) {
+                        ShortcutRecorderView(shortcut: $store.keyboardShortcut)
+                            .frame(width: 142, height: 26)
+
+                        if accessibility.isGranted {
+                            AccessibilityEnabledPin()
+                        }
+                    }
                 }
 
                 if let error = store.shortcutRegistrationError {
@@ -130,31 +136,23 @@ struct SettingsView: View {
                         .accessibilityLabel("Shortcut error: \(error)")
                 }
 
-                HStack(spacing: 8) {
-                    Image(
-                        systemName: accessibility.isGranted
-                            ? "checkmark.circle.fill"
-                            : "circle.dotted"
-                    )
-                    .foregroundStyle(accessibility.isGranted ? .primary : .secondary)
-                    .accessibilityHidden(true)
+                if !accessibility.isGranted {
+                    HStack(spacing: 8) {
+                        Image(systemName: "circle.dotted")
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(accessibility.isGranted ? "Ready" : "Setup needed")
-                            .foregroundStyle(accessibility.isGranted ? .primary : .secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Setup needed")
+                                .foregroundStyle(.secondary)
 
-                        Text(
-                            accessibility.isGranted
-                                ? "Selected text can be replaced."
-                                : "Allow this copy of RewriteBar in macOS Accessibility."
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
+                            Text("Allow this copy of RewriteBar in macOS Accessibility.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
 
-                    Spacer()
+                        Spacer()
 
-                    if !accessibility.isGranted {
                         SetupGlassButton(
                             emphasisToken: presentation.accessibilitySetupEmphasis
                         ) {
@@ -292,6 +290,35 @@ struct SettingsView: View {
         )
     }
 
+}
+
+private struct AccessibilityEnabledPin: View {
+    var body: some View {
+        Label("Enabled", systemImage: "checkmark")
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .foregroundStyle(AppPalette.deepGraphite.opacity(0.70))
+            .padding(.horizontal, 9)
+            .frame(height: 24)
+            .background {
+                ZStack {
+                    Capsule()
+                        .fill(.thinMaterial)
+
+                    Capsule()
+                        .fill(AppPalette.silver.opacity(0.22))
+
+                    Capsule()
+                        .strokeBorder(.white.opacity(0.70), lineWidth: 0.6)
+
+                    Capsule()
+                        .strokeBorder(
+                            AppPalette.graphite.opacity(0.08),
+                            lineWidth: 0.6
+                        )
+                }
+            }
+            .accessibilityLabel("Keyboard shortcut enabled")
+    }
 }
 
 private struct SetupGlassButton: View {
