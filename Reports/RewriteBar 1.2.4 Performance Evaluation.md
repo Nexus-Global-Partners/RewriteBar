@@ -1,5 +1,7 @@
 # RewriteBar 1.2.4 Performance Evaluation
 
+> Historical note: This report describes RewriteBar 1.2.4. Current behavior and model details are documented in the [README](../README.md).
+
 Date: 2026-08-04
 
 ## Goal

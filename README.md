@@ -4,7 +4,7 @@
 
 <h1 align="center">RewriteBar</h1>
 
-<p align="center">A private, native macOS writing tool that rewrites from the menu bar or directly from your keyboard.</p>
+<p align="center">Select text, press Command R, and keep writing. A local macOS rewriter with a strong default and full control over how it writes.</p>
 
 <p align="center">
   <img src="BrandAssets/rewritebar-menu-bar.png" width="800" alt="RewriteBar open from the macOS menu bar with its rewrite intensity slider">
@@ -22,7 +22,13 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-black" alt="MIT License"></a>
 </p>
 
-RewriteBar gives you two focused paths. Rewrite clipboard text from its compact menu bar control, or select editable text in another app and use a keyboard shortcut. Everything runs on your Mac through MLX. There is no account, API key, server, telemetry, analytics, or runtime network access.
+RewriteBar removes the usual copy, switch app, prompt, copy again loop. Select editable text, press one shortcut, and the rewrite replaces your selection in place. The result is also copied automatically.
+
+* **One shortcut:** Command R rewrites the selected text without opening another editor.
+* **Ready by default:** Level 3 and the RewriteBar writing style provide a balanced, natural rewrite without tuning any writing settings.
+* **Fully personal:** Choose an intensity from 0 through 10, one of five writing styles, your own shortcut, and custom instructions that either add to a style or replace it.
+* **Local and offline:** Qwen3 1.7B runs on your Mac through MLX. There is no account, API key, server, telemetry, analytics, or runtime network access.
+* **Open source and agent ready:** Change the code yourself, or give the repository to a coding agent. The project includes the context, checks, and local installation scripts needed to make a safe update.
 
 ## Product idea
 
@@ -30,12 +36,13 @@ RewriteBar explores a different approach to writing software. The tool should me
 
 The model is local, open, offline, and specialized around one task. The interface stays deliberately small. Personalization exists, but it lives behind a native Settings window rather than inside the main interaction.
 
-Extreme minimalism here does not mean removing useful capability. It means reducing the distance between intent and result:
+Extreme minimalism here does not mean removing useful capability. It means giving the default path one action while keeping deeper control available when you want it:
 
-1. Select or copy the text.
-2. Choose how strongly it may change.
-3. Rewrite once.
-4. Continue writing.
+1. Select text.
+2. Press Command R.
+3. Continue writing.
+
+The default is designed to work immediately. Settings let you define your preferred intensity, writing style, shortcut, and custom writing instructions without adding controls to the daily interaction.
 
 ## Install
 
@@ -130,6 +137,18 @@ cd RewriteBar
 
 `download-model.sh` downloads the exact model files used by the release and verifies every checksum before installation. Model weights and generated app bundles are intentionally excluded from Git. The small Apple Silicon MLX runtime library is pinned and checksum verified in the repository so clean release builds are reproducible.
 
+## Make it yours, with or without an agent
+
+RewriteBar is MIT licensed. You can fork it, change its writing policy or interface, run the checks, and install your own local build. Nothing needs to be deployed to a server.
+
+If you use a coding agent, send it the repository and this instruction:
+
+```text
+Clone https://github.com/Nexus-Global-Partners/RewriteBar. Read AGENTS.md completely before changing anything. Implement the smallest coherent version of my request, preserve the product and privacy contracts, run ./Scripts/check-project.sh, then build and install the local app with ./Scripts/install.sh.
+```
+
+[AGENTS.md](AGENTS.md) gives the agent the product contract, architecture, important files, test expectations, and release rules. [CONTRIBUTING.md](CONTRIBUTING.md) explains the pull request workflow. The scripts in [`Scripts/`](Scripts/) provide checksum verified model setup, project checks, app builds, local installation, packaging, and guarded releases.
+
 Useful development commands:
 
 ```sh
@@ -141,6 +160,14 @@ swift run RewriteCoreChecks
 ```
 
 `Scripts/test.sh` runs the standard unit and integration suite. `RewriteCoreChecks` provides an additional fast policy gate. The opt in `RewriteBenchmark` executable evaluates all eleven intensities against varied writing, fidelity, structure, safety, and latency cases using the real bundled model.
+
+## Evaluation and testing
+
+* [RewriteBar 1.2.4 Performance Evaluation](Reports/RewriteBar%201.2.4%20Performance%20Evaluation.md) records an earlier latency improvement round.
+* [`Tests/RewriteBarTests`](Tests/RewriteBarTests) contains the standard unit and integration suite.
+* [`Sources/RewriteCoreChecks`](Sources/RewriteCoreChecks) contains fast model free policy checks.
+* [`Sources/RewriteBenchmark`](Sources/RewriteBenchmark) contains the opt in local model quality and latency harness.
+* [CHANGELOG.md](CHANGELOG.md) records the current shipped behavior and release history.
 
 ## Try it
 
