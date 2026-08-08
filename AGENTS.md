@@ -27,9 +27,9 @@ Preserve these behaviors unless an issue or the user explicitly changes the prod
 13. Every intensity from 0 through 10 follows the public definition in `RewriteIntensityPolicy`.
 14. RewriteBar, Clear, Professional, Conversational, and Persuasive are subtle preferences. They never override source voice, tone, truth, meaning, uncertainty, language, details, or approximate length.
 15. Custom instructions are optional, local, bounded, saved automatically, and lower priority than every preservation rule. Compatible style preferences should be visible, but they must never reduce correction quality or introduce fragments.
-16. The configurable global shortcut defaults to Control Option R and uses shortcut intensity 3 for a new user.
+16. The configurable global shortcut defaults to Command R and uses shortcut intensity 3 for a new user.
 17. Shortcut use reads only the current editable selection after an explicit key press. Secure fields are refused.
-18. A shortcut result replaces the selection only if the process, focused element, range, and original text remain unchanged. A completed result is also copied.
+18. A shortcut result replaces the selection only if the process, focused element, and exact selected range remain unchanged. Host editors may normalize the selected text during generation. A completed result is also copied.
 19. Shortcut progress and completion appear through the menu bar icon. The shortcut never opens a second editor or adds controls to the popover.
 
 ## Visual contract

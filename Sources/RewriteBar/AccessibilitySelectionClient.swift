@@ -144,10 +144,10 @@ final class AccessibilitySelectionClient {
         try refuseSecureField(focused.element)
 
         let currentRange = try selectedTextRange(from: focused.element)
-        let currentText = try selectedText(from: focused.element)
-        guard currentRange.location == snapshot.originalRange.location,
-              currentRange.length == snapshot.originalRange.length,
-              currentText == snapshot.originalText else {
+        guard Self.selectionRangeIsUnchanged(
+            original: snapshot.originalRange,
+            current: currentRange
+        ) else {
             throw AccessibilityRewriteFailure.selectionChanged
         }
 
@@ -174,6 +174,14 @@ final class AccessibilitySelectionClient {
             replacementStatus,
             unavailableAs: .selectionNotEditable
         )
+    }
+
+    static func selectionRangeIsUnchanged(
+        original: CFRange,
+        current: CFRange
+    ) -> Bool {
+        original.location == current.location
+            && original.length == current.length
     }
 
     private func focusedContext() throws -> FocusedContext {

@@ -87,7 +87,7 @@ The slider controls how much RewriteBar changes. Each number has a defined contr
 
 ## Rewrite selected text
 
-The default shortcut is `Control Option R`.
+The default shortcut is `Command R`.
 
 1. Right click the infinity icon and open Settings.
 2. Allow RewriteBar in macOS Accessibility settings.
@@ -117,7 +117,7 @@ Every style and custom preference remains subordinate to the source. RewriteBar 
 
 The Qwen3 1.7B model is bundled inside each release and runs in process with MLX. Clipboard and selected text are never sent over the network, displayed in the app, logged, or saved. RewriteBar stores only local preferences: the last menu intensity, shortcut intensity, writing style, shortcut, and optional custom instructions.
 
-Accessibility access is used only when the configured shortcut asks RewriteBar to read and replace the current editable selection. Secure text fields are refused. Before replacement, RewriteBar verifies that the application, focused element, selected range, and selected text are still the same.
+Accessibility access is used only when the configured shortcut asks RewriteBar to read and replace the current editable selection. Secure text fields are refused. Before replacement, RewriteBar verifies that the application, focused element, and exact selected range are still the same. This keeps replacement safe while supporting dynamic editors that normalize selected text during generation.
 
 ## Build from source
 
