@@ -230,7 +230,10 @@ struct SettingsView: View {
                     }
                     .overlay {
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(.separator.opacity(0.65), lineWidth: 0.5)
+                            .strokeBorder(
+                                AppPalette.settingsSeparator(for: colorScheme),
+                                lineWidth: 0.5
+                            )
                     }
                     .disabled(!store.customInstructionsEnabled)
                     .opacity(store.customInstructionsEnabled ? 1 : 0.48)
@@ -278,6 +281,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .listRowSeparatorTint(AppPalette.settingsSeparator(for: colorScheme))
         .foregroundStyle(AppPalette.settingsPrimaryText(for: colorScheme))
         .tint(
             colorScheme == .dark
@@ -318,7 +322,11 @@ struct SettingsView: View {
                         )
                 }
             }
-            .overlay(alignment: .top) { Divider() }
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(AppPalette.settingsSeparator(for: colorScheme))
+                    .frame(height: 0.5)
+            }
         }
         .frame(width: 520, height: 590)
         .onReceive(
