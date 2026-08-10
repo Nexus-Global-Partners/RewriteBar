@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.1
+
+* Uses Option R by default, migrates the previous Command R default, and preserves custom shortcuts.
+* Rewrites selections in editors that expose an editable plain text value instead of a directly writable selected text attribute.
+* Keeps shortcut failures quiet by removing the system alert sound while retaining visible menu bar feedback.
+* Lets custom instructions either add to the selected writing style or become the only added style direction.
+* Enforces requests to avoid contractions after generation while preserving exact quoted passages.
+* Makes Accessibility setup easier to notice and condenses the enabled state into a quiet status pin.
+* Starts permission recovery automatically when a local rebuild invalidates an older Accessibility grant.
+* Aligns the custom instruction placeholder with the native text cursor.
+* Refines dark mode with a deeper graphite glass surface, softer text contrast, and restrained frosted controls.
+* Expands the standard suite and real model benchmark coverage for personalization, fidelity, styles, intensity, and latency.
+
 ## 1.3.0
 
 * Gives every intensity from 0 through 10 an explicit rewrite contract, from strict proofreading to full transformation.

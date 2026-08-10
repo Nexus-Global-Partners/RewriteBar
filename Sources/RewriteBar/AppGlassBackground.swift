@@ -4,6 +4,8 @@ import SwiftUI
 struct AppGlassBackground: View {
     var neutralSurfaceOpacity: Double = 0
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         ZStack {
             Rectangle()
@@ -11,16 +13,13 @@ struct AppGlassBackground: View {
 
             if neutralSurfaceOpacity > 0 {
                 Rectangle()
-                    .fill(
-                        Color(nsColor: .windowBackgroundColor)
-                            .opacity(neutralSurfaceOpacity)
-                    )
+                    .fill(neutralSurface)
             }
 
             RadialGradient(
                 colors: [
-                    .white.opacity(0.20),
-                    AppPalette.silver.opacity(0.10),
+                    .white.opacity(highlightOpacity),
+                    AppPalette.silver.opacity(silverOpacity),
                     .clear
                 ],
                 center: .topLeading,
@@ -30,8 +29,8 @@ struct AppGlassBackground: View {
 
             LinearGradient(
                 colors: [
-                    AppPalette.frost.opacity(0.08),
-                    AppPalette.graphite.opacity(0.05),
+                    AppPalette.frost.opacity(frostOpacity),
+                    AppPalette.graphite.opacity(graphiteOpacity),
                     Color.clear
                 ],
                 startPoint: .topLeading,
@@ -39,16 +38,53 @@ struct AppGlassBackground: View {
             )
 
             LinearGradient(
-                colors: [.white.opacity(0.15), .clear],
+                colors: [.white.opacity(topGlowOpacity), .clear],
                 startPoint: .top,
                 endPoint: .center
             )
         }
         .overlay(alignment: .top) {
             Rectangle()
-                .fill(.white.opacity(0.24))
+                .fill(.white.opacity(topEdgeOpacity))
                 .frame(height: 1)
         }
         .ignoresSafeArea()
+    }
+
+    private var usesNeutralSettingsSurface: Bool {
+        neutralSurfaceOpacity > 0
+    }
+
+    private var neutralSurface: Color {
+        if colorScheme == .dark {
+            return .black.opacity(0.66)
+        }
+
+        return Color(nsColor: .windowBackgroundColor)
+            .opacity(neutralSurfaceOpacity)
+    }
+
+    private var highlightOpacity: Double {
+        colorScheme == .dark && usesNeutralSettingsSurface ? 0.075 : 0.20
+    }
+
+    private var silverOpacity: Double {
+        colorScheme == .dark && usesNeutralSettingsSurface ? 0.035 : 0.10
+    }
+
+    private var frostOpacity: Double {
+        colorScheme == .dark && usesNeutralSettingsSurface ? 0.025 : 0.08
+    }
+
+    private var graphiteOpacity: Double {
+        colorScheme == .dark && usesNeutralSettingsSurface ? 0.08 : 0.05
+    }
+
+    private var topGlowOpacity: Double {
+        colorScheme == .dark && usesNeutralSettingsSurface ? 0.06 : 0.15
+    }
+
+    private var topEdgeOpacity: Double {
+        colorScheme == .dark && usesNeutralSettingsSurface ? 0.13 : 0.24
     }
 }

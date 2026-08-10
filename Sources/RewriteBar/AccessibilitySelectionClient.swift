@@ -78,6 +78,22 @@ enum AccessibilityPermission {
     }
 }
 
+struct AccessibilityPermissionRecoveryState {
+    private(set) var hasRequestedSetup = false
+
+    mutating func shouldBeginSetup(
+        for failure: AccessibilityRewriteFailure
+    ) -> Bool {
+        guard failure == .permissionRequired,
+              !hasRequestedSetup else {
+            return false
+        }
+
+        hasRequestedSetup = true
+        return true
+    }
+}
+
 @MainActor
 final class AccessibilitySelectionClient {
     func captureFocusedSelection(
@@ -94,24 +110,16 @@ final class AccessibilitySelectionClient {
         try refuseSecureField(focused.element)
         try refuseMultipleSelections(focused.element)
 
-        let selectedText = try selectedText(from: focused.element)
         let selectedRange = try selectedTextRange(from: focused.element)
+        let fullText = try stringValue(from: focused.element)
+        let capturedText = try capturedText(
+            from: focused.element,
+            fullText: fullText,
+            range: selectedRange
+        )
+        let selectedText = capturedText.text
         guard selectedRange.length > 0, !selectedText.isEmpty else {
             throw AccessibilityRewriteFailure.selectionEmpty
-        }
-
-        var isSettable = DarwinBoolean(false)
-        let settableStatus = AXUIElementIsAttributeSettable(
-            focused.element,
-            kAXSelectedTextAttribute as CFString,
-            &isSettable
-        )
-        try check(
-            settableStatus,
-            unavailableAs: .selectionNotEditable
-        )
-        guard isSettable.boolValue else {
-            throw AccessibilityRewriteFailure.selectionNotEditable
         }
 
         return AccessibilitySelectionSnapshot(
@@ -120,7 +128,8 @@ final class AccessibilitySelectionClient {
             element: focused.element,
             processIdentifier: focused.processIdentifier,
             originalText: selectedText,
-            originalRange: selectedRange
+            originalRange: selectedRange,
+            replacementStrategy: capturedText.replacementStrategy
         )
     }
 
@@ -144,36 +153,115 @@ final class AccessibilitySelectionClient {
         try refuseSecureField(focused.element)
 
         let currentRange = try selectedTextRange(from: focused.element)
-        let currentText = try selectedText(from: focused.element)
-        guard currentRange.location == snapshot.originalRange.location,
-              currentRange.length == snapshot.originalRange.length,
-              currentText == snapshot.originalText else {
+        guard Self.selectionRangeIsUnchanged(
+            original: snapshot.originalRange,
+            current: currentRange
+        ) else {
             throw AccessibilityRewriteFailure.selectionChanged
         }
 
-        var isSettable = DarwinBoolean(false)
-        let settableStatus = AXUIElementIsAttributeSettable(
-            focused.element,
-            kAXSelectedTextAttribute as CFString,
-            &isSettable
+        switch snapshot.replacementStrategy {
+        case .selectedText:
+            guard try isAttributeSettable(
+                kAXSelectedTextAttribute,
+                on: focused.element
+            ) else {
+                throw AccessibilityRewriteFailure.selectionNotEditable
+            }
+            try setAttribute(
+                kAXSelectedTextAttribute,
+                on: focused.element,
+                to: replacement as CFString
+            )
+
+        case .plainTextValue(let originalValue):
+            let currentValue = try stringValue(from: focused.element)
+            guard currentValue == originalValue else {
+                throw AccessibilityRewriteFailure.selectionChanged
+            }
+            guard try isAttributeSettable(
+                kAXValueAttribute,
+                on: focused.element
+            ), let updatedValue = Self.replacingText(
+                in: originalValue,
+                range: snapshot.originalRange,
+                with: replacement
+            ) else {
+                throw AccessibilityRewriteFailure.selectionNotEditable
+            }
+            try setAttribute(
+                kAXValueAttribute,
+                on: focused.element,
+                to: updatedValue as CFString
+            )
+        }
+    }
+
+    static func selectionRangeIsUnchanged(
+        original: CFRange,
+        current: CFRange
+    ) -> Bool {
+        original.location == current.location
+            && original.length == current.length
+    }
+
+    static func text(in value: String, range: CFRange) -> String? {
+        let nsRange = NSRange(
+            location: range.location,
+            length: range.length
         )
-        try check(
-            settableStatus,
-            unavailableAs: .selectionNotEditable
+        let nsValue = value as NSString
+        guard nsRange.location >= 0,
+              nsRange.length >= 0,
+              nsRange.location <= nsValue.length,
+              nsRange.length <= nsValue.length - nsRange.location else {
+            return nil
+        }
+        return nsValue.substring(with: nsRange)
+    }
+
+    static func replacingText(
+        in value: String,
+        range: CFRange,
+        with replacement: String
+    ) -> String? {
+        guard text(in: value, range: range) != nil else {
+            return nil
+        }
+        let result = NSMutableString(string: value)
+        result.replaceCharacters(
+            in: NSRange(location: range.location, length: range.length),
+            with: replacement
         )
-        guard isSettable.boolValue else {
-            throw AccessibilityRewriteFailure.selectionNotEditable
+        return result as String
+    }
+
+    static func selectionPlan(
+        selectedText: String?,
+        selectedTextIsSettable: Bool,
+        fullText: String?,
+        fullTextIsSettable: Bool,
+        range: CFRange
+    ) throws -> AccessibilitySelectionPlan {
+        if let selectedText, selectedTextIsSettable {
+            return AccessibilitySelectionPlan(
+                text: selectedText,
+                replacementStrategy: .selectedText
+            )
         }
 
-        let replacementStatus = AXUIElementSetAttributeValue(
-            focused.element,
-            kAXSelectedTextAttribute as CFString,
-            replacement as CFString
-        )
-        try check(
-            replacementStatus,
-            unavailableAs: .selectionNotEditable
-        )
+        let rangedText = fullText.flatMap { text(in: $0, range: range) }
+        if let fullText, let rangedText, fullTextIsSettable {
+            return AccessibilitySelectionPlan(
+                text: rangedText,
+                replacementStrategy: .plainTextValue(originalValue: fullText)
+            )
+        }
+
+        if selectedText != nil || rangedText != nil {
+            throw AccessibilityRewriteFailure.selectionNotEditable
+        }
+        throw AccessibilityRewriteFailure.selectionUnavailable
     }
 
     private func focusedContext() throws -> FocusedContext {
@@ -200,12 +288,88 @@ final class AccessibilitySelectionClient {
         )
     }
 
-    private func selectedText(from element: AXUIElement) throws -> String {
-        try attribute(
+    private func capturedText(
+        from element: AXUIElement,
+        fullText: String?,
+        range: CFRange
+    ) throws -> AccessibilitySelectionPlan {
+        let selectedText: String? = try optionalAttribute(
             kAXSelectedTextAttribute,
-            from: element,
-            unavailableAs: .selectionUnavailable
+            from: element
         )
+        let selectedTextIsSettable = try isAttributeSettable(
+            kAXSelectedTextAttribute,
+            on: element
+        )
+        if selectedText != nil, selectedTextIsSettable {
+            return try Self.selectionPlan(
+                selectedText: selectedText,
+                selectedTextIsSettable: true,
+                fullText: fullText,
+                fullTextIsSettable: false,
+                range: range
+            )
+        }
+
+        return try Self.selectionPlan(
+            selectedText: selectedText,
+            selectedTextIsSettable: false,
+            fullText: fullText,
+            fullTextIsSettable: fullText != nil
+                && (try isAttributeSettable(kAXValueAttribute, on: element)),
+            range: range
+        )
+    }
+
+    private func stringValue(from element: AXUIElement) throws -> String? {
+        var value: CFTypeRef?
+        let status = AXUIElementCopyAttributeValue(
+            element,
+            kAXValueAttribute as CFString,
+            &value
+        )
+        if status == .noValue
+            || status == .attributeUnsupported
+            || status == .notImplemented {
+            return nil
+        }
+        try check(status, unavailableAs: .selectionUnavailable)
+        return value as? String
+    }
+
+    private func isAttributeSettable(
+        _ name: String,
+        on element: AXUIElement
+    ) throws -> Bool {
+        var isSettable = DarwinBoolean(false)
+        let status = AXUIElementIsAttributeSettable(
+            element,
+            name as CFString,
+            &isSettable
+        )
+        switch status {
+        case .success:
+            return isSettable.boolValue
+        case .attributeUnsupported, .noValue, .notImplemented:
+            return false
+        case .apiDisabled:
+            throw AccessibilityRewriteFailure.permissionRequired
+        default:
+            throw AccessibilityRewriteFailure.accessibilityFailure(status)
+        }
+    }
+
+    private func setAttribute(
+        _ name: String,
+        on element: AXUIElement,
+        to value: CFTypeRef
+    ) throws {
+        let status = AXUIElementSetAttributeValue(
+            element,
+            name as CFString,
+            value
+        )
+        try check(status, unavailableAs: .selectionNotEditable)
     }
 
     private func selectedTextRange(from element: AXUIElement) throws -> CFRange {
@@ -270,7 +434,9 @@ final class AccessibilitySelectionClient {
             name as CFString,
             &value
         )
-        if status == .noValue || status == .attributeUnsupported {
+        if status == .noValue
+            || status == .attributeUnsupported
+            || status == .notImplemented {
             return nil
         }
         try check(status, unavailableAs: .selectionUnavailable)
@@ -313,6 +479,7 @@ final class AccessibilitySelectionSnapshot: EditableTextSelection {
     fileprivate let application: AXUIElement
     fileprivate let element: AXUIElement
     fileprivate let processIdentifier: pid_t
+    fileprivate let replacementStrategy: AccessibilityReplacementStrategy
 
     fileprivate init(
         client: AccessibilitySelectionClient,
@@ -320,7 +487,8 @@ final class AccessibilitySelectionSnapshot: EditableTextSelection {
         element: AXUIElement,
         processIdentifier: pid_t,
         originalText: String,
-        originalRange: CFRange
+        originalRange: CFRange,
+        replacementStrategy: AccessibilityReplacementStrategy
     ) {
         self.client = client
         self.application = application
@@ -328,11 +496,22 @@ final class AccessibilitySelectionSnapshot: EditableTextSelection {
         self.processIdentifier = processIdentifier
         self.originalText = originalText
         self.originalRange = originalRange
+        self.replacementStrategy = replacementStrategy
     }
 
     func replaceSelection(with replacement: String) throws {
         try client.replace(snapshot: self, with: replacement)
     }
+}
+
+enum AccessibilityReplacementStrategy: Equatable {
+    case selectedText
+    case plainTextValue(originalValue: String)
+}
+
+struct AccessibilitySelectionPlan: Equatable {
+    let text: String
+    let replacementStrategy: AccessibilityReplacementStrategy
 }
 
 private struct FocusedContext {

@@ -81,11 +81,19 @@ final class RewriteSettingsStore: ObservableObject {
         static let defaultIntensity = "settings.defaultIntensity"
         static let writingStyle = "settings.writingStyle"
         static let keyboardShortcut = "settings.keyboardShortcut"
+        static let keyboardShortcutDefaultVersion =
+            "settings.keyboardShortcutDefaultVersion"
         static let customInstructionsEnabled = "settings.customInstructionsEnabled"
+        static let customInstructionsExclusive = "settings.customInstructionsExclusive"
         static let customInstructions = "settings.customInstructions"
     }
 
     static let maximumInstructionLength = RewriteCustomInstructionsPolicy.maximumCharacters
+    private static let currentKeyboardShortcutDefaultVersion = 2
+    private static let previousKeyboardShortcutDefault = GlobalShortcut(
+        keyCode: UInt32(kVK_ANSI_R),
+        modifiers: [.command]
+    )
 
     @Published var defaultIntensity: Int {
         didSet {
@@ -110,6 +118,15 @@ final class RewriteSettingsStore: ObservableObject {
         didSet { defaults.set(customInstructionsEnabled, forKey: Key.customInstructionsEnabled) }
     }
 
+    @Published var customInstructionsExclusive: Bool {
+        didSet {
+            defaults.set(
+                customInstructionsExclusive,
+                forKey: Key.customInstructionsExclusive
+            )
+        }
+    }
+
     @Published private(set) var customInstructions: String
     @Published private(set) var shortcutRegistrationError: String?
 
@@ -128,16 +145,34 @@ final class RewriteSettingsStore: ObservableObject {
             .flatMap(RewriteStyle.init(rawValue:))
             ?? .rewriteBar
 
+        let shortcutDefaultVersion = defaults.integer(
+            forKey: Key.keyboardShortcutDefaultVersion
+        )
         if let data = defaults.data(forKey: Key.keyboardShortcut),
-           let shortcut = try? JSONDecoder().decode(GlobalShortcut.self, from: data) {
-            keyboardShortcut = shortcut
+           let savedShortcut = try? JSONDecoder().decode(GlobalShortcut.self, from: data) {
+            if shortcutDefaultVersion < Self.currentKeyboardShortcutDefaultVersion,
+               savedShortcut == Self.previousKeyboardShortcutDefault {
+                keyboardShortcut = .rewriteDefault
+                if let migratedData = try? JSONEncoder().encode(GlobalShortcut.rewriteDefault) {
+                    defaults.set(migratedData, forKey: Key.keyboardShortcut)
+                }
+            } else {
+                keyboardShortcut = savedShortcut
+            }
         } else if defaults.object(forKey: Key.keyboardShortcut) == nil {
             keyboardShortcut = .rewriteDefault
         } else {
             keyboardShortcut = nil
         }
+        defaults.set(
+            Self.currentKeyboardShortcutDefaultVersion,
+            forKey: Key.keyboardShortcutDefaultVersion
+        )
 
         customInstructionsEnabled = defaults.bool(forKey: Key.customInstructionsEnabled)
+        customInstructionsExclusive = defaults.bool(
+            forKey: Key.customInstructionsExclusive
+        )
         customInstructions = defaults.string(forKey: Key.customInstructions) ?? ""
         shortcutRegistrationError = nil
     }
@@ -151,6 +186,7 @@ final class RewriteSettingsStore: ObservableObject {
     func resetCustomInstructions() {
         customInstructions = ""
         customInstructionsEnabled = false
+        customInstructionsExclusive = false
         defaults.removeObject(forKey: Key.customInstructions)
     }
 

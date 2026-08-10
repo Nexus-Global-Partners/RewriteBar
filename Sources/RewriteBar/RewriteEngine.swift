@@ -6,12 +6,14 @@ struct RewriteRequest: Equatable, Sendable {
     let intensity: Int
     let writingStyle: RewriteStyle
     let customInstructions: String?
+    let customInstructionsExclusive: Bool
 
     init(
         text: String,
         intensity: Int,
         writingStyle: RewriteStyle = .rewriteBar,
-        customInstructions: String? = nil
+        customInstructions: String? = nil,
+        customInstructionsExclusive: Bool = false
     ) {
         self.text = text
         self.intensity = RewriteIntensityPolicy.clampedLevel(intensity)
@@ -19,6 +21,8 @@ struct RewriteRequest: Equatable, Sendable {
         self.customInstructions = RewriteCustomInstructionsPolicy.normalized(
             customInstructions
         )
+        self.customInstructionsExclusive = self.customInstructions != nil
+            && customInstructionsExclusive
     }
 }
 

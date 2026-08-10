@@ -193,6 +193,19 @@ public enum OutputFidelityValidator {
 
     private static func expandingContractions(in value: String) -> String {
         var normalized = value.lowercased()
+        let missingApostrophes = [
+            "cant": "cannot", "couldnt": "could not",
+            "wouldnt": "would not", "shouldnt": "should not",
+            "wont": "will not", "mustnt": "must not",
+            "itll": "it will"
+        ]
+        for (contraction, expanded) in missingApostrophes {
+            normalized = normalized.replacingOccurrences(
+                of: #"\b"# + contraction + #"\b"#,
+                with: expanded,
+                options: .regularExpression
+            )
+        }
         let contractions = [
             "can't": "cannot",
             "can’t": "cannot",

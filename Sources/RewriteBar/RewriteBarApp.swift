@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var restoresFocusAfterClose = false
     private var shortcutSettingsObservation: AnyCancellable?
     private var statusFeedbackTask: Task<Void, Never>?
+    private var accessibilityRecovery = AccessibilityPermissionRecoveryState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -196,6 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             customInstructions: settings.customInstructionsEnabled
                 ? settings.customInstructions
                 : nil,
+            customInstructionsExclusive: settings.customInstructionsExclusive,
             promptingForPermission: false
         )
     }
@@ -215,10 +217,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     private func showShortcutFailure(_ failure: AccessibilityRewriteFailure) {
-        logger.notice(
+        logger.error(
             "Shortcut rewrite unavailable: \(failure.localizedDescription, privacy: .public)"
         )
-        NSSound.beep()
         showTemporaryStatus(
             title: "!",
             toolTip: failure.localizedDescription,
@@ -226,7 +227,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         )
 
         if failure == .permissionRequired {
-            SettingsWindowController.shared.show()
+            if accessibilityRecovery.shouldBeginSetup(for: failure) {
+                AccessibilityPermission.beginSetup()
+            }
+            SettingsWindowController.shared.show(
+                emphasizeAccessibilitySetup: true
+            )
         }
     }
 
