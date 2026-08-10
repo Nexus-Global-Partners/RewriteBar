@@ -34,7 +34,7 @@ For a complete local app update, an agent can use this sequence after making and
 ./Scripts/install.sh
 ```
 
-The first command is only needed when the pinned model is not already available. The second builds, signs, installs, and opens the local app.
+The first command is only needed when the pinned model is not already available. The second builds, signs, and installs the local app. Open the installed app once from Finder.
 
 ## Test the complete app
 

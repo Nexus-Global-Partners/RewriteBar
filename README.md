@@ -4,7 +4,7 @@
 
 <h1 align="center">RewriteBar</h1>
 
-<p align="center">Select text, press Command R, and keep writing. A local macOS rewriter with a strong default and full control over how it writes.</p>
+<p align="center">Select text, press Option R, and keep writing. A local macOS rewriter with a strong default and full control over how it writes.</p>
 
 <p align="center">
   <img src="BrandAssets/rewritebar-menu-bar.png" width="800" alt="RewriteBar open from the macOS menu bar with its rewrite intensity slider">
@@ -24,7 +24,7 @@
 
 RewriteBar removes the usual copy, switch app, prompt, copy again loop. Select editable text, press one shortcut, and the rewrite replaces your selection in place. The result is also copied automatically.
 
-* **One shortcut:** Command R rewrites the selected text without opening another editor.
+* **One shortcut:** Option R rewrites the selected text without opening another editor.
 * **Ready by default:** Level 3 and the RewriteBar writing style provide a balanced, natural rewrite without tuning any writing settings.
 * **Fully personal:** Choose an intensity from 0 through 10, one of five writing styles, your own shortcut, and custom instructions that either add to a style or replace it.
 * **Local and offline:** Qwen3 1.7B runs on your Mac through MLX. There is no account, API key, server, telemetry, analytics, or runtime network access.
@@ -39,7 +39,7 @@ The model is local, open, offline, and specialized around one task. The interfac
 Extreme minimalism here does not mean removing useful capability. It means giving the default path one action while keeping deeper control available when you want it:
 
 1. Select text.
-2. Press Command R.
+2. Press Option R.
 3. Continue writing.
 
 The default is designed to work immediately. Settings let you define your preferred intensity, writing style, shortcut, and custom writing instructions without adding controls to the daily interaction.
@@ -94,7 +94,7 @@ The slider controls how much RewriteBar changes. Each number has a defined contr
 
 ## Rewrite selected text
 
-The default shortcut is `Command R`.
+The default shortcut is `Option R`.
 
 1. Right click the infinity icon and open Settings.
 2. Allow RewriteBar in macOS Accessibility settings.
