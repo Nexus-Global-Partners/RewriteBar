@@ -228,13 +228,6 @@ struct SettingsView: View {
                                 .accessibilityHidden(true)
                         }
                     }
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(
-                                AppPalette.settingsSeparator(for: colorScheme),
-                                lineWidth: 0.5
-                            )
-                    }
                     .disabled(!store.customInstructionsEnabled)
                     .opacity(store.customInstructionsEnabled ? 1 : 0.48)
                     .accessibilityLabel("Custom rewrite instructions")
@@ -281,7 +274,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .listRowSeparatorTint(AppPalette.settingsSeparator(for: colorScheme))
+        .listRowSeparator(.hidden)
         .foregroundStyle(AppPalette.settingsPrimaryText(for: colorScheme))
         .tint(
             colorScheme == .dark
@@ -321,11 +314,6 @@ struct SettingsView: View {
                                 : AppPalette.frost.opacity(0.16)
                         )
                 }
-            }
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(AppPalette.settingsSeparator(for: colorScheme))
-                    .frame(height: 0.5)
             }
         }
         .frame(width: 520, height: 590)

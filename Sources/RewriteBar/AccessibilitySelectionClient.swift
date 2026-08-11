@@ -162,12 +162,10 @@ final class AccessibilitySelectionClient {
 
         switch snapshot.replacementStrategy {
         case .selectedText:
-            guard try isAttributeSettable(
-                kAXSelectedTextAttribute,
-                on: focused.element
-            ) else {
-                throw AccessibilityRewriteFailure.selectionNotEditable
-            }
+            // Some editors expose a readable selected-text attribute while
+            // incorrectly reporting it as not settable. The set operation is
+            // the definitive capability check. If it fails, the coordinator
+            // preserves the rewrite in the clipboard instead of discarding it.
             try setAttribute(
                 kAXSelectedTextAttribute,
                 on: focused.element,
@@ -238,12 +236,14 @@ final class AccessibilitySelectionClient {
 
     static func selectionPlan(
         selectedText: String?,
-        selectedTextIsSettable: Bool,
         fullText: String?,
         fullTextIsSettable: Bool,
         range: CFRange
     ) throws -> AccessibilitySelectionPlan {
-        if let selectedText, selectedTextIsSettable {
+        // A readable selection is enough to begin a rewrite. Accessibility
+        // clients are not consistent about whether selected text is reported
+        // as settable, so replacement is attempted only after generation.
+        if let selectedText {
             return AccessibilitySelectionPlan(
                 text: selectedText,
                 replacementStrategy: .selectedText
@@ -297,15 +297,10 @@ final class AccessibilitySelectionClient {
             kAXSelectedTextAttribute,
             from: element
         )
-        let selectedTextIsSettable = try isAttributeSettable(
-            kAXSelectedTextAttribute,
-            on: element
-        )
-        if selectedText != nil, selectedTextIsSettable {
+        if selectedText != nil {
             return try Self.selectionPlan(
                 selectedText: selectedText,
-                selectedTextIsSettable: true,
-                fullText: fullText,
+                fullText: nil,
                 fullTextIsSettable: false,
                 range: range
             )
@@ -313,7 +308,6 @@ final class AccessibilitySelectionClient {
 
         return try Self.selectionPlan(
             selectedText: selectedText,
-            selectedTextIsSettable: false,
             fullText: fullText,
             fullTextIsSettable: fullText != nil
                 && (try isAttributeSettable(kAXValueAttribute, on: element)),

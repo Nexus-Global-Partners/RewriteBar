@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.2
+
+* Removes Settings dividers for a cleaner, quieter surface in both appearances.
+* Lets the shortcut rewrite any readable Accessibility selection, even when an editor incorrectly reports the selected text as read only. RewriteBar now attempts the native replacement at completion and safely copies the result if that editor rejects the replacement.
+
 ## 1.3.1
 
 * Uses Option R by default, migrates the previous Command R default, and preserves custom shortcuts.

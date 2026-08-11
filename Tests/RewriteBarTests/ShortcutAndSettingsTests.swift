@@ -166,12 +166,26 @@ func accessibilityRangeHelpersRejectInvalidEditorRanges() {
 }
 
 @Test @MainActor
-func accessibilitySelectionPlanFallsBackToTheEditablePlainTextValue() throws {
+func accessibilitySelectionPlanUsesDirectReplacementWhenSelectedTextIsAvailable() throws {
     let fullText = "Before selected after"
     let selectedRange = CFRange(location: 7, length: 8)
     let plan = try AccessibilitySelectionClient.selectionPlan(
         selectedText: "selected",
-        selectedTextIsSettable: false,
+        fullText: fullText,
+        fullTextIsSettable: true,
+        range: selectedRange
+    )
+
+    #expect(plan.text == "selected")
+    #expect(plan.replacementStrategy == .selectedText)
+}
+
+@Test @MainActor
+func accessibilitySelectionPlanUsesEditablePlainTextValueWhenSelectedTextIsUnavailable() throws {
+    let fullText = "Before selected after"
+    let selectedRange = CFRange(location: 7, length: 8)
+    let plan = try AccessibilitySelectionClient.selectionPlan(
+        selectedText: nil,
         fullText: fullText,
         fullTextIsSettable: true,
         range: selectedRange
@@ -185,13 +199,12 @@ func accessibilitySelectionPlanFallsBackToTheEditablePlainTextValue() throws {
 }
 
 @Test @MainActor
-func accessibilitySelectionPlanPrefersDirectSelectionReplacement() throws {
+func accessibilitySelectionPlanUsesReadableSelectionEvenWhenEditabilityIsUnknown() throws {
     let plan = try AccessibilitySelectionClient.selectionPlan(
         selectedText: "selected",
-        selectedTextIsSettable: true,
-        fullText: "Before selected after",
-        fullTextIsSettable: true,
-        range: CFRange(location: 7, length: 8)
+        fullText: nil,
+        fullTextIsSettable: false,
+        range: CFRange(location: 0, length: 8)
     )
 
     #expect(plan.text == "selected")
@@ -199,26 +212,10 @@ func accessibilitySelectionPlanPrefersDirectSelectionReplacement() throws {
 }
 
 @Test @MainActor
-func accessibilitySelectionPlanDistinguishesUnavailableAndReadOnlySelections() {
-    do {
-        _ = try AccessibilitySelectionClient.selectionPlan(
-            selectedText: "selected",
-            selectedTextIsSettable: false,
-            fullText: nil,
-            fullTextIsSettable: false,
-            range: CFRange(location: 0, length: 8)
-        )
-        Issue.record("A read only selection was accepted.")
-    } catch let failure as AccessibilityRewriteFailure {
-        #expect(failure == .selectionNotEditable)
-    } catch {
-        Issue.record("A read only selection returned an unexpected error.")
-    }
-
+func accessibilitySelectionPlanRejectsUnavailableSelections() {
     do {
         _ = try AccessibilitySelectionClient.selectionPlan(
             selectedText: nil,
-            selectedTextIsSettable: false,
             fullText: nil,
             fullTextIsSettable: false,
             range: CFRange(location: 0, length: 0)

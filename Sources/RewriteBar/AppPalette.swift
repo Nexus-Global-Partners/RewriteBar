@@ -24,9 +24,4 @@ enum AppPalette {
             : deepGraphite
     }
 
-    static func settingsSeparator(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark
-            ? .white.opacity(0.10)
-            : graphite.opacity(0.09)
-    }
 }
