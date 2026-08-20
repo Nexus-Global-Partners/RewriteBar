@@ -421,6 +421,16 @@ private struct AccessibilityEnabledPin: View {
     }
 }
 
+struct SetupAttentionState {
+    private(set) var handledToken = 0
+
+    mutating func shouldEmphasize(for token: Int) -> Bool {
+        guard token > handledToken else { return false }
+        handledToken = token
+        return true
+    }
+}
+
 private struct SetupGlassButton: View {
     let emphasisToken: Int
     let action: () -> Void
@@ -429,6 +439,7 @@ private struct SetupGlassButton: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var emphasisStrength = 0.0
     @State private var emphasisTask: Task<Void, Never>?
+    @State private var attentionState = SetupAttentionState()
 
     var body: some View {
         Button(action: action) {
@@ -487,16 +498,26 @@ private struct SetupGlassButton: View {
                         y: 2
                     )
                 }
-                .scaleEffect(1 + (0.045 * emphasisStrength))
+                .scaleEffect(
+                    reduceMotion ? 1 : 1 + (0.045 * emphasisStrength)
+                )
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
-        .onChange(of: emphasisToken) { _, _ in
-            emphasize()
+        .onAppear {
+            handleEmphasis(emphasisToken)
+        }
+        .onChange(of: emphasisToken) { _, token in
+            handleEmphasis(token)
         }
         .onDisappear {
             emphasisTask?.cancel()
         }
+    }
+
+    private func handleEmphasis(_ token: Int) {
+        guard attentionState.shouldEmphasize(for: token) else { return }
+        emphasize()
     }
 
     private func emphasize() {
