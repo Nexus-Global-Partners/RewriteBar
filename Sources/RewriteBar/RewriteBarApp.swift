@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import OSLog
+import QuartzCore
 import RewriteCore
 import SwiftUI
 
@@ -17,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let shortcutCoordinator = SelectedTextRewriteCoordinator()
     private let popover = NSPopover()
     private var statusItem: NSStatusItem?
-    private var statusProgressIndicator: NSProgressIndicator?
+    private var statusProgressIndicator: MenuBarProgressIndicator?
     private var previouslyActiveApplication: NSRunningApplication?
     private var restoresFocusAfterClose = false
     private var shortcutSettingsObservation: AnyCancellable?
@@ -145,11 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         button.action = #selector(togglePopover(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
-        let progressIndicator = NSProgressIndicator()
-        progressIndicator.style = .spinning
-        progressIndicator.controlSize = .small
-        progressIndicator.isIndeterminate = true
-        progressIndicator.isDisplayedWhenStopped = false
+        let progressIndicator = MenuBarProgressIndicator()
         progressIndicator.translatesAutoresizingMaskIntoConstraints = false
         button.addSubview(progressIndicator)
         NSLayoutConstraint.activate([
@@ -390,6 +387,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     @objc private func quitApplication() {
         NSApp.terminate(nil)
+    }
+}
+
+final class MenuBarProgressIndicator: NSView {
+    private let arcLayer = CAShapeLayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        isHidden = true
+
+        arcLayer.fillColor = NSColor.clear.cgColor
+        arcLayer.strokeColor = NSColor.white.cgColor
+        arcLayer.lineWidth = 1.8
+        arcLayer.lineCap = .round
+        arcLayer.strokeStart = 0.08
+        arcLayer.strokeEnd = 0.78
+        layer?.addSublayer(arcLayer)
+    }
+
+    convenience init() {
+        self.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        arcLayer.frame = bounds
+        arcLayer.path = CGPath(
+            ellipseIn: bounds.insetBy(dx: 1.4, dy: 1.4),
+            transform: nil
+        )
+    }
+
+    func startAnimation(_ sender: Any?) {
+        isHidden = false
+        arcLayer.removeAnimation(forKey: "rotation")
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            return
+        }
+
+        let rotation = CABasicAnimation(keyPath: "transform.rotation.z")
+        rotation.fromValue = 0
+        rotation.toValue = Double.pi * 2
+        rotation.duration = 0.75
+        rotation.repeatCount = .infinity
+        rotation.timingFunction = CAMediaTimingFunction(name: .linear)
+        arcLayer.add(rotation, forKey: "rotation")
+    }
+
+    func stopAnimation(_ sender: Any?) {
+        arcLayer.removeAnimation(forKey: "rotation")
+        isHidden = true
     }
 }
 
