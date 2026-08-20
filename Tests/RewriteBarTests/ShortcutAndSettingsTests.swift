@@ -71,6 +71,7 @@ func codexConnectionFeedbackAppearsOnlyAfterAReadyConnection() {
 
 @Test
 func shortcutFailureFeedbackExplainsWhatTheUserCanDoNext() {
+    #expect(ShortcutFailureFeedbackPolicy.fontSize == 11)
     #expect(
         ShortcutFailureFeedbackPolicy.title(for: .noFocusedApplication)
             == "Select text"
@@ -86,6 +87,28 @@ func shortcutFailureFeedbackExplainsWhatTheUserCanDoNext() {
     #expect(
         ShortcutFailureFeedbackPolicy.title(for: .selectionNotEditable)
             == "Not editable"
+    )
+}
+
+@Test @MainActor
+func accessibilityPrefersTheSystemWideFocusedElementForTheActiveProcess() {
+    #expect(
+        AccessibilitySelectionClient.shouldUseSystemWideFocusedElement(
+            elementProcessIdentifier: 2468,
+            focusedProcessIdentifier: 2468
+        )
+    )
+    #expect(
+        !AccessibilitySelectionClient.shouldUseSystemWideFocusedElement(
+            elementProcessIdentifier: 9753,
+            focusedProcessIdentifier: 2468
+        )
+    )
+    #expect(
+        !AccessibilitySelectionClient.shouldUseSystemWideFocusedElement(
+            elementProcessIdentifier: nil,
+            focusedProcessIdentifier: 2468
+        )
     )
 }
 

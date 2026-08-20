@@ -286,7 +286,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             title: ShortcutFailureFeedbackPolicy.title(for: failure),
             toolTip: failure.localizedDescription,
             duration: .seconds(3),
-            length: NSStatusItem.variableLength
+            length: NSStatusItem.variableLength,
+            fontSize: ShortcutFailureFeedbackPolicy.fontSize
         )
 
         if failure == .permissionRequired {
@@ -304,10 +305,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         toolTip: String,
         duration: Duration,
         length: CGFloat = NSStatusItem.squareLength,
+        fontSize: CGFloat = 16,
         resetsShortcutState: Bool = true
     ) {
         statusFeedbackTask?.cancel()
-        showStatusItem(title: title, toolTip: toolTip, length: length)
+        showStatusItem(
+            title: title,
+            toolTip: toolTip,
+            length: length,
+            fontSize: fontSize
+        )
         statusFeedbackTask = Task { [weak self] in
             try? await Task.sleep(for: duration)
             guard !Task.isCancelled, let self else { return }
@@ -322,11 +329,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private func showStatusItem(
         title: String,
         toolTip: String,
-        length: CGFloat = NSStatusItem.squareLength
+        length: CGFloat = NSStatusItem.squareLength,
+        fontSize: CGFloat = 16
     ) {
         guard let statusItem, let button = statusItem.button else { return }
         statusItem.length = length
         statusProgressIndicator?.stopAnimation(nil)
+        button.font = .systemFont(ofSize: fontSize, weight: .medium)
         button.title = title
         button.toolTip = toolTip
         button.setAccessibilityLabel(toolTip)
@@ -461,6 +470,8 @@ enum CodexConnectionFeedbackPolicy {
 }
 
 enum ShortcutFailureFeedbackPolicy {
+    static let fontSize: CGFloat = 11
+
     static func title(for failure: AccessibilityRewriteFailure) -> String {
         switch failure {
         case .permissionRequired:

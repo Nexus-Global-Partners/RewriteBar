@@ -309,6 +309,12 @@ final class AccessibilitySelectionClient {
 
     private func focusedContext() throws -> FocusedContext {
         let systemWide = AXUIElementCreateSystemWide()
+        let systemWideFocusedElement: AXUIElement? = try optionalAttribute(
+            kAXFocusedUIElementAttribute,
+            from: systemWide
+        )
+        let systemWideFocusedElementProcessIdentifier = systemWideFocusedElement
+            .flatMap { applicationProcessIdentifier(from: $0) }
         let accessibilityApplication: AXUIElement? = try optionalAttribute(
             kAXFocusedApplicationAttribute,
             from: systemWide
@@ -320,7 +326,9 @@ final class AccessibilitySelectionClient {
             .frontmostApplication?
             .processIdentifier
         let processIdentifier = try Self.focusedApplicationProcessIdentifier(
-            accessibilityProcessIdentifier: accessibilityProcessIdentifier,
+            accessibilityProcessIdentifier:
+                systemWideFocusedElementProcessIdentifier
+                    ?? accessibilityProcessIdentifier,
             frontmostProcessIdentifier: frontmostProcessIdentifier,
             currentProcessIdentifier: ProcessInfo.processInfo.processIdentifier
         )
@@ -331,17 +339,32 @@ final class AccessibilitySelectionClient {
         } else {
             application = AXUIElementCreateApplication(processIdentifier)
         }
-        let element: AXUIElement = try attribute(
-            kAXFocusedUIElementAttribute,
-            from: application,
-            unavailableAs: .noFocusedElement
-        )
+        let element: AXUIElement
+        if Self.shouldUseSystemWideFocusedElement(
+            elementProcessIdentifier: systemWideFocusedElementProcessIdentifier,
+            focusedProcessIdentifier: processIdentifier
+        ), let systemWideFocusedElement {
+            element = systemWideFocusedElement
+        } else {
+            element = try attribute(
+                kAXFocusedUIElementAttribute,
+                from: application,
+                unavailableAs: .noFocusedElement
+            )
+        }
 
         return FocusedContext(
             application: application,
             element: element,
             processIdentifier: processIdentifier
         )
+    }
+
+    static func shouldUseSystemWideFocusedElement(
+        elementProcessIdentifier: pid_t?,
+        focusedProcessIdentifier: pid_t
+    ) -> Bool {
+        elementProcessIdentifier == focusedProcessIdentifier
     }
 
     private func applicationProcessIdentifier(
