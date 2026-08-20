@@ -483,6 +483,11 @@ for line in sys.stdin:
     identifier = request["id"]
 
     if method == "initialize":
+        if params.get("capabilities", {}).get("experimentalApi") is not False:
+            send({"jsonrpc": "2.0", "id": identifier, "error": {
+                "code": -32602, "message": "experimental API must remain disabled"
+            }})
+            continue
         count_path = os.path.join(home, "initialize-count")
         count = int(marker("initialize-count") or "0") + 1
         with open(count_path, "w", encoding="utf-8") as value:
@@ -513,7 +518,8 @@ for line in sys.stdin:
             and params.get("ephemeral") is True
             and params.get("approvalPolicy") == "never"
             and params.get("sandbox") == "read-only"
-            and params.get("dynamicTools") == []
+            and "dynamicTools" not in params
+            and "environments" not in params
             and "Never use tools" in params.get("baseInstructions", "")
             and "System rules" in params.get("developerInstructions", "")
         )
@@ -534,7 +540,7 @@ for line in sys.stdin:
             and params.get("sandboxPolicy") == {
                 "type": "readOnly", "networkAccess": False
             }
-            and params.get("environments") == []
+            and "environments" not in params
             and params.get("outputSchema", {}).get("required") == ["answer"]
             and len(params.get("input", [])) == 1
             and params["input"][0].get("type") == "text"

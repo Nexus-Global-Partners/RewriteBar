@@ -234,9 +234,7 @@ actor CodexAppServerClient {
                 "sandbox": .string("read-only"),
                 "cwd": .string(workingDirectory.path),
                 "baseInstructions": .string(Self.baseInstructions),
-                "developerInstructions": .string(systemPrompt),
-                "environments": .array([]),
-                "dynamicTools": .array([])
+                "developerInstructions": .string(systemPrompt)
             ])
         )
         guard let threadID = threadResult
@@ -272,7 +270,6 @@ actor CodexAppServerClient {
                         "type": .string("readOnly"),
                         "networkAccess": .bool(false)
                     ]),
-                    "environments": .array([]),
                     "outputSchema": Self.outputSchema
                 ])
             )

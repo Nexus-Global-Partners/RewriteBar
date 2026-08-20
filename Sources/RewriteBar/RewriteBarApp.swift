@@ -21,6 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var previouslyActiveApplication: NSRunningApplication?
     private var restoresFocusAfterClose = false
     private var shortcutSettingsObservation: AnyCancellable?
+    private var shortcutRecordingBeginObservation: AnyCancellable?
+    private var shortcutRecordingEndObservation: AnyCancellable?
+    private var codexAccountObservation: AnyCancellable?
+    private var previousCodexAccountState: CodexAccountController.State = .idle
     private var statusFeedbackTask: Task<Void, Never>?
     private var accessibilityRecovery = AccessibilityPermissionRecoveryState()
 
@@ -29,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         configurePopover()
         configureStatusItem()
         configureShortcutFlow()
+        configureCodexConnectionFeedback()
         logger.notice("Application launched")
     }
 
@@ -182,6 +187,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .sink { [weak self] shortcut in
                 self?.registerGlobalShortcut(shortcut)
             }
+
+        shortcutRecordingBeginObservation = NotificationCenter.default
+            .publisher(for: .rewriteBarShortcutRecordingDidBegin)
+            .sink { [weak self] _ in
+                self?.hotKeyRegistrar.unregister()
+            }
+        shortcutRecordingEndObservation = NotificationCenter.default
+            .publisher(for: .rewriteBarShortcutRecordingDidEnd)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                registerGlobalShortcut(settings.keyboardShortcut)
+            }
+    }
+
+    private func configureCodexConnectionFeedback() {
+        codexAccountObservation = CodexAccountController.shared.$state
+            .removeDuplicates()
+            .sink { [weak self] state in
+                guard let self else { return }
+                let previousState = previousCodexAccountState
+                previousCodexAccountState = state
+                guard CodexConnectionFeedbackPolicy.showsConfirmation(
+                    previous: previousState,
+                    current: state
+                ), !shortcutCoordinator.isRewriting else {
+                    return
+                }
+                NSHapticFeedbackManager.defaultPerformer.perform(
+                    .alignment,
+                    performanceTime: .now
+                )
+                showTemporaryStatus(
+                    title: "✓",
+                    toolTip: "Codex connected",
+                    duration: .seconds(2),
+                    resetsShortcutState: false
+                )
+            }
     }
 
     private func registerGlobalShortcut(_ shortcut: GlobalShortcut?) {
@@ -261,7 +304,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private func showTemporaryStatus(
         title: String,
         toolTip: String,
-        duration: Duration
+        duration: Duration,
+        resetsShortcutState: Bool = true
     ) {
         statusFeedbackTask?.cancel()
         showStatusItem(title: title, toolTip: toolTip)
@@ -269,7 +313,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             try? await Task.sleep(for: duration)
             guard !Task.isCancelled, let self else { return }
             showStatusItem(title: "∞", toolTip: "RewriteBar")
-            shortcutCoordinator.resetState()
+            if resetsShortcutState {
+                shortcutCoordinator.resetState()
+            }
             statusFeedbackTask = nil
         }
     }
@@ -336,6 +382,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     @objc private func quitApplication() {
         NSApp.terminate(nil)
+    }
+}
+
+enum CodexConnectionFeedbackPolicy {
+    static func showsConfirmation(
+        previous: CodexAccountController.State,
+        current: CodexAccountController.State
+    ) -> Bool {
+        guard case .connecting = previous,
+              case .connected(_, true, _) = current else {
+            return false
+        }
+        return true
     }
 }
 

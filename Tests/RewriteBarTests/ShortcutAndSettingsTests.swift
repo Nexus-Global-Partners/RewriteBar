@@ -6,6 +6,70 @@ import Testing
 @testable import RewriteBar
 
 @Test @MainActor
+func shortcutRecorderSuspendsAndRestoresGlobalRegistration() {
+    let button = ShortcutRecorderButton()
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 220, height: 60),
+        styleMask: [.titled],
+        backing: .buffered,
+        defer: false
+    )
+    window.contentView = button
+
+    var beginCount = 0
+    var endCount = 0
+    let center = NotificationCenter.default
+    let beginObserver = center.addObserver(
+        forName: .rewriteBarShortcutRecordingDidBegin,
+        object: button,
+        queue: nil
+    ) { _ in
+        beginCount += 1
+    }
+    let endObserver = center.addObserver(
+        forName: .rewriteBarShortcutRecordingDidEnd,
+        object: button,
+        queue: nil
+    ) { _ in
+        endCount += 1
+    }
+    defer {
+        center.removeObserver(beginObserver)
+        center.removeObserver(endObserver)
+    }
+
+    button.performClick(nil)
+    #expect(button.isRecording)
+    #expect(beginCount == 1)
+
+    _ = window.makeFirstResponder(nil)
+    #expect(!button.isRecording)
+    #expect(endCount == 1)
+}
+
+@Test @MainActor
+func codexConnectionFeedbackAppearsOnlyAfterAReadyConnection() {
+    #expect(
+        CodexConnectionFeedbackPolicy.showsConfirmation(
+            previous: .connecting,
+            current: .connected(plan: "pro", lunaAvailable: true, usedPercent: 19)
+        )
+    )
+    #expect(
+        !CodexConnectionFeedbackPolicy.showsConfirmation(
+            previous: .checking,
+            current: .connected(plan: "pro", lunaAvailable: true, usedPercent: 19)
+        )
+    )
+    #expect(
+        !CodexConnectionFeedbackPolicy.showsConfirmation(
+            previous: .connecting,
+            current: .connected(plan: "pro", lunaAvailable: false, usedPercent: 19)
+        )
+    )
+}
+
+@Test @MainActor
 func settingsEnabledStatusAdaptsToLightAndDarkAppearances() throws {
     let lightAppearance = try #require(NSAppearance(named: .aqua))
     let darkAppearance = try #require(NSAppearance(named: .darkAqua))
