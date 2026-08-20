@@ -26,7 +26,7 @@ public enum RewriteError: LocalizedError, Equatable, Sendable {
         case .generationFailed:
             "The rewrite could not be completed."
         case .timedOut:
-            "The local model took too long to respond."
+            "The rewrite took too long to respond."
         case .emptyOutput:
             "The model returned no rewritten text."
         case .cancelled:

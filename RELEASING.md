@@ -1,6 +1,6 @@
 # Releasing RewriteBar
 
-RewriteBar releases are built by GitHub Actions from a version tag. The app itself never checks the network for updates. Existing users update by rerunning the verified install command from the README.
+RewriteBar releases are built by GitHub Actions from a version tag. The app itself never checks the network for updates. On-device mode is network free; optional Codex Luna mode connects only for account status and requested rewrites. Existing users update by rerunning the verified install command from the README.
 
 ## Prepare the release
 

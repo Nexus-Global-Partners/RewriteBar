@@ -53,21 +53,67 @@ struct SettingsView: View {
 
     @State private var instructionsDraft: String
     @StateObject private var accessibility: AccessibilitySetupModel
+    @StateObject private var codexAccount: CodexAccountController
     @Environment(\.colorScheme) private var colorScheme
 
     init(
         store: RewriteSettingsStore = .shared,
         presentation: SettingsPresentationModel = SettingsPresentationModel(),
-        accessibility: AccessibilitySetupModel = AccessibilitySetupModel()
+        accessibility: AccessibilitySetupModel = AccessibilitySetupModel(),
+        codexAccount: CodexAccountController = .shared
     ) {
         self.store = store
         self.presentation = presentation
         _instructionsDraft = State(initialValue: store.customInstructions)
         _accessibility = StateObject(wrappedValue: accessibility)
+        _codexAccount = StateObject(wrappedValue: codexAccount)
     }
 
     var body: some View {
         Form {
+            Section {
+                Picker("Rewrite with", selection: $store.rewriteProvider) {
+                    ForEach(RewriteProvider.allCases) { provider in
+                        Text(provider.displayName).tag(provider)
+                    }
+                }
+                .accessibilityLabel("Rewrite processing mode")
+
+                if store.rewriteProvider == .codexLuna {
+                    HStack(spacing: 8) {
+                        Label(
+                            codexAccount.statusText,
+                            systemImage: codexAccount.isLunaReady
+                                ? "checkmark.circle"
+                                : "exclamationmark.circle"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                        Spacer()
+
+                        if codexAccount.canConnect {
+                            Button("Connect Codex") {
+                                codexAccount.connect()
+                            }
+                        } else if codexAccount.isConnected {
+                            Button("Disconnect") {
+                                codexAccount.disconnect()
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("Processing")
+            } footer: {
+                Text(
+                    store.rewriteProvider == .codexLuna
+                        ? "Online mode sends copied or selected text and any enabled custom instructions to OpenAI through your Codex account. Requests use an isolated, temporary thread with command, image-view, web, app, and external tools disabled. Any unexpected tool request is refused. If Luna is unavailable, RewriteBar retries on this Mac."
+                        : "On-device mode keeps rewrite text on this Mac and does not require an account or network connection."
+                )
+                .foregroundStyle(.secondary)
+            }
+
             Section {
                 LabeledContent("Shortcut intensity") {
                     HStack(spacing: 10) {
@@ -316,7 +362,12 @@ struct SettingsView: View {
                 }
             }
         }
-        .frame(width: 520, height: 590)
+        .frame(width: 520, height: 700)
+        .onChange(of: store.rewriteProvider) { _, provider in
+            if provider == .codexLuna {
+                codexAccount.refresh()
+            }
+        }
         .onReceive(
             NotificationCenter.default.publisher(
                 for: NSApplication.didBecomeActiveNotification
@@ -325,6 +376,9 @@ struct SettingsView: View {
             accessibility.refresh()
         }
         .task {
+            if store.rewriteProvider == .codexLuna {
+                codexAccount.refresh()
+            }
             while !Task.isCancelled {
                 accessibility.refresh()
                 try? await Task.sleep(for: .milliseconds(500))

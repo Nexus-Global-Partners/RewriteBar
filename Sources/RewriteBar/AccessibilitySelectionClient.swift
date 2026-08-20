@@ -1,6 +1,8 @@
 import AppKit
 import ApplicationServices
 import Foundation
+import OSLog
+import RewriteCore
 
 @MainActor
 protocol EditableTextSelection: AnyObject {
@@ -96,6 +98,11 @@ struct AccessibilityPermissionRecoveryState {
 
 @MainActor
 final class AccessibilitySelectionClient {
+    private let logger = Logger(
+        subsystem: AppConstants.bundleIdentifier,
+        category: "AccessibilitySelection"
+    )
+
     func captureFocusedSelection(
         promptingForPermission: Bool = false
     ) throws -> AccessibilitySelectionSnapshot {
@@ -172,25 +179,34 @@ final class AccessibilitySelectionClient {
                 to: replacement as CFString
             )
 
-        case .plainTextValue(let originalValue):
-            let currentValue = try stringValue(from: focused.element)
-            guard currentValue == originalValue else {
-                throw AccessibilityRewriteFailure.selectionChanged
+        case .selectedTextWithPlainTextFallback(let originalValue):
+            do {
+                try setAttribute(
+                    kAXSelectedTextAttribute,
+                    on: focused.element,
+                    to: replacement as CFString
+                )
+            } catch let failure as AccessibilityRewriteFailure {
+                guard failure != .permissionRequired else {
+                    throw failure
+                }
+                logger.notice(
+                    "Direct selection replacement was unavailable; trying the editable text value: \(failure.localizedDescription, privacy: .public)"
+                )
+                try replacePlainTextValue(
+                    on: focused.element,
+                    originalValue: originalValue,
+                    range: snapshot.originalRange,
+                    with: replacement
+                )
             }
-            guard try isAttributeSettable(
-                kAXValueAttribute,
-                on: focused.element
-            ), let updatedValue = Self.replacingText(
-                in: originalValue,
+
+        case .plainTextValue(let originalValue):
+            try replacePlainTextValue(
+                on: focused.element,
+                originalValue: originalValue,
                 range: snapshot.originalRange,
                 with: replacement
-            ) else {
-                throw AccessibilityRewriteFailure.selectionNotEditable
-            }
-            try setAttribute(
-                kAXValueAttribute,
-                on: focused.element,
-                to: updatedValue as CFString
             )
         }
     }
@@ -234,6 +250,24 @@ final class AccessibilitySelectionClient {
         return result as String
     }
 
+    static func focusedApplicationProcessIdentifier(
+        accessibilityProcessIdentifier: pid_t?,
+        frontmostProcessIdentifier: pid_t?,
+        currentProcessIdentifier: pid_t
+    ) throws -> pid_t {
+        let candidates = [
+            accessibilityProcessIdentifier,
+            frontmostProcessIdentifier
+        ]
+
+        guard let processIdentifier = candidates.compactMap({ $0 }).first(
+            where: { $0 > 0 && $0 != currentProcessIdentifier }
+        ) else {
+            throw AccessibilityRewriteFailure.noFocusedApplication
+        }
+        return processIdentifier
+    }
+
     static func selectionPlan(
         selectedText: String?,
         fullText: String?,
@@ -244,6 +278,15 @@ final class AccessibilitySelectionClient {
         // clients are not consistent about whether selected text is reported
         // as settable, so replacement is attempted only after generation.
         if let selectedText {
+            if let fullText,
+               text(in: fullText, range: range) == selectedText {
+                return AccessibilitySelectionPlan(
+                    text: selectedText,
+                    replacementStrategy: .selectedTextWithPlainTextFallback(
+                        originalValue: fullText
+                    )
+                )
+            }
             return AccessibilitySelectionPlan(
                 text: selectedText,
                 replacementStrategy: .selectedText
@@ -266,26 +309,50 @@ final class AccessibilitySelectionClient {
 
     private func focusedContext() throws -> FocusedContext {
         let systemWide = AXUIElementCreateSystemWide()
-        let application: AXUIElement = try attribute(
+        let accessibilityApplication: AXUIElement? = try optionalAttribute(
             kAXFocusedApplicationAttribute,
-            from: systemWide,
-            unavailableAs: .noFocusedApplication
+            from: systemWide
         )
+        let accessibilityProcessIdentifier = accessibilityApplication.flatMap {
+            applicationProcessIdentifier(from: $0)
+        }
+        let frontmostProcessIdentifier = NSWorkspace.shared
+            .frontmostApplication?
+            .processIdentifier
+        let processIdentifier = try Self.focusedApplicationProcessIdentifier(
+            accessibilityProcessIdentifier: accessibilityProcessIdentifier,
+            frontmostProcessIdentifier: frontmostProcessIdentifier,
+            currentProcessIdentifier: ProcessInfo.processInfo.processIdentifier
+        )
+        let application: AXUIElement
+        if let accessibilityApplication,
+           accessibilityProcessIdentifier == processIdentifier {
+            application = accessibilityApplication
+        } else {
+            application = AXUIElementCreateApplication(processIdentifier)
+        }
         let element: AXUIElement = try attribute(
             kAXFocusedUIElementAttribute,
             from: application,
             unavailableAs: .noFocusedElement
         )
 
-        var processIdentifier: pid_t = 0
-        let pidStatus = AXUIElementGetPid(application, &processIdentifier)
-        try check(pidStatus, unavailableAs: .noFocusedApplication)
-
         return FocusedContext(
             application: application,
             element: element,
             processIdentifier: processIdentifier
         )
+    }
+
+    private func applicationProcessIdentifier(
+        from application: AXUIElement
+    ) -> pid_t? {
+        var processIdentifier: pid_t = 0
+        guard AXUIElementGetPid(application, &processIdentifier) == .success,
+              processIdentifier > 0 else {
+            return nil
+        }
+        return processIdentifier
     }
 
     private func capturedText(
@@ -300,7 +367,10 @@ final class AccessibilitySelectionClient {
         if selectedText != nil {
             return try Self.selectionPlan(
                 selectedText: selectedText,
-                fullText: nil,
+                fullText: fullText,
+                // A readable selected-text attribute is sufficient to begin.
+                // The full value is retained as a native fallback and tested
+                // by the actual set operation only if direct replacement fails.
                 fullTextIsSettable: false,
                 range: range
             )
@@ -364,6 +434,30 @@ final class AccessibilitySelectionClient {
             value
         )
         try check(status, unavailableAs: .selectionNotEditable)
+    }
+
+    private func replacePlainTextValue(
+        on element: AXUIElement,
+        originalValue: String,
+        range: CFRange,
+        with replacement: String
+    ) throws {
+        let currentValue = try stringValue(from: element)
+        guard currentValue == originalValue else {
+            throw AccessibilityRewriteFailure.selectionChanged
+        }
+        guard let updatedValue = Self.replacingText(
+            in: originalValue,
+            range: range,
+            with: replacement
+        ) else {
+            throw AccessibilityRewriteFailure.selectionNotEditable
+        }
+        try setAttribute(
+            kAXValueAttribute,
+            on: element,
+            to: updatedValue as CFString
+        )
     }
 
     private func selectedTextRange(from element: AXUIElement) throws -> CFRange {
@@ -500,6 +594,7 @@ final class AccessibilitySelectionSnapshot: EditableTextSelection {
 
 enum AccessibilityReplacementStrategy: Equatable {
     case selectedText
+    case selectedTextWithPlainTextFallback(originalValue: String)
     case plainTextValue(originalValue: String)
 }
 

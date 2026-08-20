@@ -42,6 +42,7 @@ func settingsUseProductDefaultsAndPersistChanges() throws {
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
     let store = RewriteSettingsStore(defaults: defaults)
+    #expect(store.rewriteProvider == .local)
     #expect(store.defaultIntensity == 3)
     #expect(store.writingStyle == .rewriteBar)
     #expect(store.keyboardShortcut == .rewriteDefault)
@@ -52,6 +53,7 @@ func settingsUseProductDefaultsAndPersistChanges() throws {
     #expect(!store.customInstructionsExclusive)
 
     store.defaultIntensity = 14
+    store.rewriteProvider = .codexLuna
     store.writingStyle = .clear
     store.keyboardShortcut = nil
     store.customInstructionsEnabled = true
@@ -59,6 +61,7 @@ func settingsUseProductDefaultsAndPersistChanges() throws {
     store.saveCustomInstructions("  Keep it direct.  ")
 
     let reloaded = RewriteSettingsStore(defaults: defaults)
+    #expect(reloaded.rewriteProvider == .codexLuna)
     #expect(reloaded.defaultIntensity == 10)
     #expect(reloaded.writingStyle == .clear)
     #expect(reloaded.keyboardShortcut == nil)
@@ -71,6 +74,7 @@ func settingsUseProductDefaultsAndPersistChanges() throws {
     #expect(!reloaded.customInstructionsExclusive)
 
     reloaded.resetAll()
+    #expect(reloaded.rewriteProvider == .local)
     #expect(reloaded.keyboardShortcut == .rewriteDefault)
     #expect(reloaded.keyboardShortcut?.displayName == "⌥R")
 }
@@ -166,7 +170,48 @@ func accessibilityRangeHelpersRejectInvalidEditorRanges() {
 }
 
 @Test @MainActor
-func accessibilitySelectionPlanUsesDirectReplacementWhenSelectedTextIsAvailable() throws {
+func accessibilityFocusedApplicationFallsBackToTheFrontmostProcess() throws {
+    let resolved = try AccessibilitySelectionClient
+        .focusedApplicationProcessIdentifier(
+            accessibilityProcessIdentifier: nil,
+            frontmostProcessIdentifier: 2468,
+            currentProcessIdentifier: 1357
+        )
+
+    #expect(resolved == 2468)
+}
+
+@Test @MainActor
+func accessibilityFocusedApplicationPrefersTheSystemWideProcess() throws {
+    let resolved = try AccessibilitySelectionClient
+        .focusedApplicationProcessIdentifier(
+            accessibilityProcessIdentifier: 9753,
+            frontmostProcessIdentifier: 2468,
+            currentProcessIdentifier: 1357
+        )
+
+    #expect(resolved == 9753)
+}
+
+@Test @MainActor
+func accessibilityFocusedApplicationRejectsRewriteBarItself() {
+    do {
+        _ = try AccessibilitySelectionClient
+            .focusedApplicationProcessIdentifier(
+                accessibilityProcessIdentifier: 1357,
+                frontmostProcessIdentifier: 1357,
+                currentProcessIdentifier: 1357
+            )
+        Issue.record("RewriteBar accepted itself as the editing application.")
+    } catch let failure as AccessibilityRewriteFailure {
+        #expect(failure == .noFocusedApplication)
+    } catch {
+        Issue.record("Focused application resolution returned an unexpected error.")
+    }
+}
+
+@Test @MainActor
+func accessibilitySelectionPlanKeepsAPlainTextFallbackWhenAvailable() throws {
     let fullText = "Before selected after"
     let selectedRange = CFRange(location: 7, length: 8)
     let plan = try AccessibilitySelectionClient.selectionPlan(
@@ -177,7 +222,10 @@ func accessibilitySelectionPlanUsesDirectReplacementWhenSelectedTextIsAvailable(
     )
 
     #expect(plan.text == "selected")
-    #expect(plan.replacementStrategy == .selectedText)
+    #expect(
+        plan.replacementStrategy
+            == .selectedTextWithPlainTextFallback(originalValue: fullText)
+    )
 }
 
 @Test @MainActor
@@ -209,6 +257,22 @@ func accessibilitySelectionPlanUsesReadableSelectionEvenWhenEditabilityIsUnknown
 
     #expect(plan.text == "selected")
     #expect(plan.replacementStrategy == .selectedText)
+}
+
+@Test @MainActor
+func accessibilitySelectionPlanKeepsFallbackWhenSettableReportingIsWrong() throws {
+    let fullText = "Before selected after"
+    let plan = try AccessibilitySelectionClient.selectionPlan(
+        selectedText: "selected",
+        fullText: fullText,
+        fullTextIsSettable: false,
+        range: CFRange(location: 7, length: 8)
+    )
+
+    #expect(
+        plan.replacementStrategy
+            == .selectedTextWithPlainTextFallback(originalValue: fullText)
+    )
 }
 
 @Test @MainActor
@@ -370,7 +434,8 @@ func shortcutRewriteForwardsPersonalizationSettings() async throws {
         intensity: 7,
         writingStyle: .persuasive,
         customInstructions: "Keep it understated.",
-        customInstructionsExclusive: true
+        customInstructionsExclusive: true,
+        provider: .codexLuna
     )
     try await waitUntil { coordinator.state == .replaced }
 
@@ -380,6 +445,19 @@ func shortcutRewriteForwardsPersonalizationSettings() async throws {
     #expect(request?.writingStyle == .persuasive)
     #expect(request?.customInstructions == "Keep it understated.")
     #expect(request?.customInstructionsExclusive == true)
+    #expect(request?.provider == .codexLuna)
+}
+
+@Test @MainActor
+func settingsRecoverFromAnUnknownProviderValue() throws {
+    let suiteName = "RewriteBarTests.ProviderMigration.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    defaults.set("future-provider", forKey: RewriteSettingsStore.Key.rewriteProvider)
+
+    let store = RewriteSettingsStore(defaults: defaults)
+
+    #expect(store.rewriteProvider == .local)
 }
 
 @MainActor

@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let shortcutCoordinator = SelectedTextRewriteCoordinator()
     private let popover = NSPopover()
     private var statusItem: NSStatusItem?
+    private var statusProgressIndicator: NSProgressIndicator?
     private var previouslyActiveApplication: NSRunningApplication?
     private var restoresFocusAfterClose = false
     private var shortcutSettingsObservation: AnyCancellable?
@@ -34,6 +35,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         hotKeyRegistrar.unregister()
         statusFeedbackTask?.cancel()
+        let shutdownFinished = DispatchSemaphore(value: 0)
+        Task.detached {
+            await CodexAppServerClient.shared.shutdown()
+            shutdownFinished.signal()
+        }
+        _ = shutdownFinished.wait(timeout: .now() + 0.5)
     }
 
     func applicationShouldHandleReopen(
@@ -132,6 +139,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         button.target = self
         button.action = #selector(togglePopover(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+
+        let progressIndicator = NSProgressIndicator()
+        progressIndicator.style = .spinning
+        progressIndicator.controlSize = .small
+        progressIndicator.isIndeterminate = true
+        progressIndicator.isDisplayedWhenStopped = false
+        progressIndicator.translatesAutoresizingMaskIntoConstraints = false
+        button.addSubview(progressIndicator)
+        NSLayoutConstraint.activate([
+            progressIndicator.centerXAnchor.constraint(equalTo: button.centerXAnchor),
+            progressIndicator.centerYAnchor.constraint(equalTo: button.centerYAnchor),
+            progressIndicator.widthAnchor.constraint(equalToConstant: 14),
+            progressIndicator.heightAnchor.constraint(equalToConstant: 14)
+        ])
+
+        statusProgressIndicator = progressIndicator
         statusItem = item
     }
 
@@ -139,6 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         shortcutCoordinator.onCompletion = { [weak self] output in
             guard let self else { return }
             clipboard.writePlainText(output)
+            logger.notice("Shortcut selection replaced and copied")
             showShortcutSuccess(replacedSelection: true)
         }
         shortcutCoordinator.onCopyOnlyCompletion = { [weak self] output, failure in
@@ -187,10 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         statusFeedbackTask?.cancel()
         statusFeedbackTask = nil
-        showStatusItem(
-            title: "◌",
-            toolTip: "Rewriting selected text"
-        )
+        showStatusProgress(toolTip: "Rewriting selected text")
         shortcutCoordinator.startRewrite(
             intensity: settings.defaultIntensity,
             writingStyle: settings.writingStyle,
@@ -198,6 +219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 ? settings.customInstructions
                 : nil,
             customInstructionsExclusive: settings.customInstructionsExclusive,
+            provider: settings.rewriteProvider,
             promptingForPermission: false
         )
     }
@@ -254,9 +276,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func showStatusItem(title: String, toolTip: String) {
         guard let button = statusItem?.button else { return }
+        statusProgressIndicator?.stopAnimation(nil)
         button.title = title
         button.toolTip = toolTip
         button.setAccessibilityLabel(toolTip)
+    }
+
+    private func showStatusProgress(toolTip: String) {
+        guard let button = statusItem?.button else { return }
+        button.title = ""
+        button.toolTip = toolTip
+        button.setAccessibilityLabel(toolTip)
+        statusProgressIndicator?.startAnimation(nil)
     }
 
     private func showStatusMenu(from button: NSStatusBarButton) {

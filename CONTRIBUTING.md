@@ -6,7 +6,7 @@ You can work directly or with a coding agent. In either case, [AGENTS.md](AGENTS
 
 ## Before you start
 
-Read [AGENTS.md](AGENTS.md), then search existing Issues and Discussions. Open an issue before a new control, workflow, writing style, model, dependency, permission, or architecture change so product direction is agreed before implementation.
+Read [AGENTS.md](AGENTS.md), then search existing Issues and Discussions. Open an issue before a new control, workflow, writing style, model, online processing behavior, dependency, permission, or architecture change so product direction is agreed before implementation.
 
 Small bug fixes, accessibility improvements, tests, and documentation corrections can go directly to a focused pull request.
 
@@ -48,7 +48,9 @@ codesign --verify --deep --strict dist/RewriteBar.app
 
 Open the built app and test the complete menu bar flow with invented text. Check levels 0, 3, 5, and 10 when prompt or generation behavior changes. Never paste private clipboard content into an issue, test, log, screenshot, or pull request.
 
-Prompt, policy, or model runtime changes should also run the opt in benchmark against the pinned model. The benchmark supports focused case and intensity arguments plus environment controls for writing styles, repetitions, custom instructions, source protection, temperature, cache behavior, and quantized key value storage. Do not commit its generated reports.
+Prompt, policy, or model runtime changes should also run the opt in benchmark against the pinned local model and, for online changes, Codex Luna. Set `REWRITE_BENCHMARK_PROVIDER=codexLuna` for an isolated no-fallback Luna run; the default is `local`. Luna benchmarking uses RewriteBar's isolated Application Support Codex home by default. `REWRITE_BENCHMARK_CODEX_HOME` may point to a different dedicated test home, but never to the developer's normal Codex home. The benchmark supports focused case and intensity arguments plus environment controls for writing styles, repetitions, custom instructions, source protection, Luna effort, temperature, cache behavior, and quantized key value storage. Compare requested/actual provider, model identifier, errors, score, median/p95/max latency, provider fallback, source-fidelity fallback, check pass rates, and intensity contrast. Do not commit its generated reports.
+
+Codex App Server changes also require fixture-backed protocol tests and an opt-in live check using an invented source. Verify disconnected, missing-runtime, offline, usage-limit, malformed-response, unexpected-tool, timeout, cancellation, and automatic local-fallback behavior. Never reuse or copy a developer's normal Codex credentials or configuration for a test, and never commit RewriteBar's isolated Codex support directory.
 
 Shortcut and Accessibility changes also require manual checks in several host applications:
 
@@ -64,7 +66,7 @@ Shortcut and Accessibility changes also require manual checks in several host ap
 The pull request should state:
 
 * what changes for the user
-* why the change fits a local, fast, minimal menu bar tool
+* why the change fits a private-by-default, fast, minimal menu bar tool
 * the exact checks and manual flow you ran
 * a screenshot for visible interface changes
 
@@ -76,4 +78,4 @@ Never commit model weights, app bundles, release archives, benchmark output, cli
 
 ## Product principles
 
-RewriteBar should remain local, private, fast, focused, accessible, and visually restrained. New controls must justify their permanent cost in a tiny menu bar interface. Preserve the single slider and single action flow. Put durable personalization in the native Settings window, not in the popover, unless an issue explicitly changes that product direction.
+RewriteBar should remain private by default, fast, focused, accessible, and visually restrained. On-device processing is the default; optional online processing must be explicit, isolated, bounded, and safely recover to local generation. New controls must justify their permanent cost in a tiny menu bar interface. Preserve the single slider and single action flow. Put durable personalization and processing choices in the native Settings window, not in the popover, unless an issue explicitly changes that product direction.

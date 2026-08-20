@@ -44,6 +44,7 @@ final class SelectedTextRewriteCoordinator: ObservableObject {
         writingStyle: RewriteStyle = .rewriteBar,
         customInstructions: String? = nil,
         customInstructionsExclusive: Bool = false,
+        provider: RewriteProvider = .local,
         promptingForPermission: Bool = false
     ) {
         guard rewriteTask == nil else {
@@ -82,7 +83,8 @@ final class SelectedTextRewriteCoordinator: ObservableObject {
             intensity: safeIntensity,
             writingStyle: writingStyle,
             customInstructions: customInstructions,
-            customInstructionsExclusive: customInstructionsExclusive
+            customInstructionsExclusive: customInstructionsExclusive,
+            provider: provider
         )
         rewriteTask = Task(priority: .userInitiated) { [weak self, rewriteEngine] in
             guard let self else { return }

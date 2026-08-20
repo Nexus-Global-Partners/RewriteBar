@@ -78,6 +78,7 @@ final class RewriteSettingsStore: ObservableObject {
     static let shared = RewriteSettingsStore()
 
     enum Key {
+        static let rewriteProvider = "settings.rewriteProvider"
         static let defaultIntensity = "settings.defaultIntensity"
         static let writingStyle = "settings.writingStyle"
         static let keyboardShortcut = "settings.keyboardShortcut"
@@ -104,6 +105,10 @@ final class RewriteSettingsStore: ObservableObject {
             }
             defaults.set(defaultIntensity, forKey: Key.defaultIntensity)
         }
+    }
+
+    @Published var rewriteProvider: RewriteProvider {
+        didSet { defaults.set(rewriteProvider.rawValue, forKey: Key.rewriteProvider) }
     }
 
     @Published var writingStyle: RewriteStyle {
@@ -134,6 +139,10 @@ final class RewriteSettingsStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+
+        rewriteProvider = defaults.string(forKey: Key.rewriteProvider)
+            .flatMap(RewriteProvider.init(rawValue:))
+            ?? .local
 
         if defaults.object(forKey: Key.defaultIntensity) == nil {
             defaultIntensity = 3
@@ -191,6 +200,7 @@ final class RewriteSettingsStore: ObservableObject {
     }
 
     func resetAll() {
+        rewriteProvider = .local
         defaultIntensity = 3
         writingStyle = .rewriteBar
         keyboardShortcut = .rewriteDefault

@@ -213,7 +213,8 @@ final class RewriteViewModel: ObservableObject {
             intensity: rewriteIntensity,
             writingStyle: writingStyle,
             customInstructions: customInstructions,
-            customInstructionsExclusive: settings.customInstructionsExclusive
+            customInstructionsExclusive: settings.customInstructionsExclusive,
+            provider: settings.rewriteProvider
         )
         generationTask = Task(priority: .userInitiated) { [weak self, rewriteEngine] in
             defer {

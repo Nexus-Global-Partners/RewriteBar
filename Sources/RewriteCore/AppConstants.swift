@@ -7,6 +7,7 @@ public enum AppConstants {
     public static let modelIdentifier = "mlx-community/Qwen3-1.7B-4bit"
     public static let modelDisplayName = "Qwen3 1.7B"
     public static let bundledModelDirectoryName = "Qwen3-1.7B-4bit"
+    public static let codexLunaModelIdentifier = "gpt-5.6-luna"
 
     public static let maximumInputCharacters = 2_000
     public static let keepsModelResident = true
