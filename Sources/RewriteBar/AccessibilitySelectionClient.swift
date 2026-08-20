@@ -339,18 +339,29 @@ final class AccessibilitySelectionClient {
         } else {
             application = AXUIElementCreateApplication(processIdentifier)
         }
+        let applicationFocusedElement: AXUIElement? = try optionalAttribute(
+            kAXFocusedUIElementAttribute,
+            from: application
+        )
         let element: AXUIElement
         if Self.shouldUseSystemWideFocusedElement(
             elementProcessIdentifier: systemWideFocusedElementProcessIdentifier,
             focusedProcessIdentifier: processIdentifier
         ), let systemWideFocusedElement {
             element = systemWideFocusedElement
+        } else if let applicationFocusedElement {
+            element = applicationFocusedElement
         } else {
-            element = try attribute(
-                kAXFocusedUIElementAttribute,
-                from: application,
-                unavailableAs: .noFocusedElement
-            )
+            guard let focusedWindow: AXUIElement = try optionalAttribute(
+                kAXFocusedWindowAttribute,
+                from: application
+            ), let selection = try uniqueEditableSelection(
+                in: focusedWindow,
+                processIdentifier: processIdentifier
+            ) else {
+                throw AccessibilityRewriteFailure.noFocusedElement
+            }
+            element = selection
         }
 
         return FocusedContext(
@@ -367,6 +378,32 @@ final class AccessibilitySelectionClient {
         elementProcessIdentifier == focusedProcessIdentifier
     }
 
+    static func uniqueSelectionCandidate<Element>(
+        roots: [Element],
+        maximumVisitedElements: Int = 384,
+        children: (Element) throws -> [Element],
+        hasEditableSelection: (Element) throws -> Bool
+    ) throws -> Element? {
+        var queue = roots
+        var index = 0
+        var candidate: Element?
+
+        while index < queue.count, index < maximumVisitedElements {
+            let element = queue[index]
+            index += 1
+
+            if try hasEditableSelection(element) {
+                guard candidate == nil else {
+                    throw AccessibilityRewriteFailure.multipleSelectionsUnsupported
+                }
+                candidate = element
+            }
+            queue.append(contentsOf: try children(element))
+        }
+
+        return candidate
+    }
+
     private func applicationProcessIdentifier(
         from application: AXUIElement
     ) -> pid_t? {
@@ -376,6 +413,36 @@ final class AccessibilitySelectionClient {
             return nil
         }
         return processIdentifier
+    }
+
+    private func uniqueEditableSelection(
+        in focusedWindow: AXUIElement,
+        processIdentifier: pid_t
+    ) throws -> AXUIElement? {
+        try Self.uniqueSelectionCandidate(
+            roots: [focusedWindow],
+            children: { element in
+                let children: [AXUIElement]? = try self.optionalAttribute(
+                    kAXChildrenAttribute,
+                    from: element
+                )
+                return children ?? []
+            },
+            hasEditableSelection: { element in
+                guard self.applicationProcessIdentifier(from: element)
+                        == processIdentifier,
+                      let range = try self.optionalSelectedTextRange(
+                        from: element
+                      ),
+                      range.length > 0 else {
+                    return false
+                }
+                return try self.isAttributeSettable(
+                    kAXSelectedTextAttribute,
+                    on: element
+                )
+            }
+        )
     }
 
     private func capturedText(
@@ -484,18 +551,28 @@ final class AccessibilitySelectionClient {
     }
 
     private func selectedTextRange(from element: AXUIElement) throws -> CFRange {
-        let value: AXValue = try attribute(
-            kAXSelectedTextRangeAttribute,
-            from: element,
-            unavailableAs: .selectionUnavailable
-        )
-        guard AXValueGetType(value) == .cfRange else {
+        guard let range = try optionalSelectedTextRange(from: element) else {
             throw AccessibilityRewriteFailure.selectionUnavailable
+        }
+        return range
+    }
+
+    private func optionalSelectedTextRange(
+        from element: AXUIElement
+    ) throws -> CFRange? {
+        guard let value: AXValue = try optionalAttribute(
+            kAXSelectedTextRangeAttribute,
+            from: element
+        ) else {
+            return nil
+        }
+        guard AXValueGetType(value) == .cfRange else {
+            return nil
         }
 
         var range = CFRange()
         guard AXValueGetValue(value, .cfRange, &range) else {
-            throw AccessibilityRewriteFailure.selectionUnavailable
+            return nil
         }
         return range
     }

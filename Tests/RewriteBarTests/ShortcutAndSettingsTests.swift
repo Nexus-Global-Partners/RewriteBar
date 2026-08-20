@@ -113,6 +113,35 @@ func accessibilityPrefersTheSystemWideFocusedElementForTheActiveProcess() {
 }
 
 @Test @MainActor
+func accessibilityFindsAUniqueEditableSelectionBelowTheFocusedWindow() throws {
+    let children = [
+        0: [1, 2],
+        1: [3],
+        2: [],
+        3: []
+    ]
+
+    let candidate = try AccessibilitySelectionClient.uniqueSelectionCandidate(
+        roots: [0],
+        children: { children[$0] ?? [] },
+        hasEditableSelection: { $0 == 3 }
+    )
+
+    #expect(candidate == 3)
+}
+
+@Test @MainActor
+func accessibilityRefusesAmbiguousWindowSelectionFallback() {
+    #expect(throws: AccessibilityRewriteFailure.multipleSelectionsUnsupported) {
+        _ = try AccessibilitySelectionClient.uniqueSelectionCandidate(
+            roots: [0],
+            children: { $0 == 0 ? [1, 2] : [] },
+            hasEditableSelection: { $0 == 1 || $0 == 2 }
+        )
+    }
+}
+
+@Test @MainActor
 func settingsEnabledStatusAdaptsToLightAndDarkAppearances() throws {
     let lightAppearance = try #require(NSAppearance(named: .aqua))
     let darkAppearance = try #require(NSAppearance(named: .darkAqua))
