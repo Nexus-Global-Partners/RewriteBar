@@ -214,7 +214,7 @@ struct SettingsView: View {
             } footer: {
                 Text(
                     accessibility.isGranted
-                        ? "Select editable text, then press the shortcut. The result replaces the selection and is copied."
+                        ? "Close Settings, select editable text in another app, then press \(store.keyboardShortcut?.displayName ?? "the shortcut"). RewriteBar cannot rewrite this Settings window."
                         : "Set Up refreshes any older RewriteBar permission, then macOS asks you to allow this copy."
                 )
                 .foregroundStyle(.secondary)

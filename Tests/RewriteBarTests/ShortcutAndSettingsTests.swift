@@ -16,22 +16,22 @@ func shortcutRecorderSuspendsAndRestoresGlobalRegistration() {
     )
     window.contentView = button
 
-    var beginCount = 0
-    var endCount = 0
+    let beginCount = NotificationCounter()
+    let endCount = NotificationCounter()
     let center = NotificationCenter.default
     let beginObserver = center.addObserver(
         forName: .rewriteBarShortcutRecordingDidBegin,
         object: button,
         queue: nil
     ) { _ in
-        beginCount += 1
+        beginCount.value += 1
     }
     let endObserver = center.addObserver(
         forName: .rewriteBarShortcutRecordingDidEnd,
         object: button,
         queue: nil
     ) { _ in
-        endCount += 1
+        endCount.value += 1
     }
     defer {
         center.removeObserver(beginObserver)
@@ -40,11 +40,11 @@ func shortcutRecorderSuspendsAndRestoresGlobalRegistration() {
 
     button.performClick(nil)
     #expect(button.isRecording)
-    #expect(beginCount == 1)
+    #expect(beginCount.value == 1)
 
     _ = window.makeFirstResponder(nil)
     #expect(!button.isRecording)
-    #expect(endCount == 1)
+    #expect(endCount.value == 1)
 }
 
 @Test @MainActor
@@ -66,6 +66,26 @@ func codexConnectionFeedbackAppearsOnlyAfterAReadyConnection() {
             previous: .connecting,
             current: .connected(plan: "pro", lunaAvailable: false, usedPercent: 19)
         )
+    )
+}
+
+@Test
+func shortcutFailureFeedbackExplainsWhatTheUserCanDoNext() {
+    #expect(
+        ShortcutFailureFeedbackPolicy.title(for: .noFocusedApplication)
+            == "Select text"
+    )
+    #expect(
+        ShortcutFailureFeedbackPolicy.title(for: .noFocusedElement)
+            == "Select text"
+    )
+    #expect(
+        ShortcutFailureFeedbackPolicy.title(for: .permissionRequired)
+            == "Set Up"
+    )
+    #expect(
+        ShortcutFailureFeedbackPolicy.title(for: .selectionNotEditable)
+            == "Not editable"
     )
 }
 
@@ -597,4 +617,8 @@ private final class AccessibilityPermissionState: @unchecked Sendable {
     var granted = false
     var setupRequestCount = 0
     var setupCompletionCount = 0
+}
+
+private final class NotificationCounter: @unchecked Sendable {
+    var value = 0
 }

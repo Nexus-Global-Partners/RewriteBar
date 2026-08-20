@@ -286,9 +286,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             "Shortcut rewrite unavailable: \(failure.localizedDescription, privacy: .public)"
         )
         showTemporaryStatus(
-            title: "!",
+            title: ShortcutFailureFeedbackPolicy.title(for: failure),
             toolTip: failure.localizedDescription,
-            duration: .seconds(2)
+            duration: .seconds(3),
+            length: NSStatusItem.variableLength
         )
 
         if failure == .permissionRequired {
@@ -305,10 +306,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         title: String,
         toolTip: String,
         duration: Duration,
+        length: CGFloat = NSStatusItem.squareLength,
         resetsShortcutState: Bool = true
     ) {
         statusFeedbackTask?.cancel()
-        showStatusItem(title: title, toolTip: toolTip)
+        showStatusItem(title: title, toolTip: toolTip, length: length)
         statusFeedbackTask = Task { [weak self] in
             try? await Task.sleep(for: duration)
             guard !Task.isCancelled, let self else { return }
@@ -320,8 +322,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    private func showStatusItem(title: String, toolTip: String) {
-        guard let button = statusItem?.button else { return }
+    private func showStatusItem(
+        title: String,
+        toolTip: String,
+        length: CGFloat = NSStatusItem.squareLength
+    ) {
+        guard let statusItem, let button = statusItem.button else { return }
+        statusItem.length = length
         statusProgressIndicator?.stopAnimation(nil)
         button.title = title
         button.toolTip = toolTip
@@ -329,7 +336,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     private func showStatusProgress(toolTip: String) {
-        guard let button = statusItem?.button else { return }
+        guard let statusItem, let button = statusItem.button else { return }
+        statusItem.length = NSStatusItem.squareLength
         button.title = ""
         button.toolTip = toolTip
         button.setAccessibilityLabel(toolTip)
@@ -395,6 +403,33 @@ enum CodexConnectionFeedbackPolicy {
             return false
         }
         return true
+    }
+}
+
+enum ShortcutFailureFeedbackPolicy {
+    static func title(for failure: AccessibilityRewriteFailure) -> String {
+        switch failure {
+        case .permissionRequired:
+            return "Set Up"
+        case .noFocusedApplication, .noFocusedElement, .selectionEmpty:
+            return "Select text"
+        case .secureField:
+            return "Secure field"
+        case .selectionUnavailable, .selectionNotEditable:
+            return "Not editable"
+        case .multipleSelectionsUnsupported:
+            return "One selection"
+        case .focusChanged, .selectionChanged:
+            return "Selection changed"
+        case .rewriteAlreadyRunning:
+            return "Working"
+        case .invalidShortcut, .shortcutConflict, .shortcutRegistrationFailed:
+            return "Shortcut error"
+        case .accessibilityFailure:
+            return "Accessibility error"
+        case .rewriteFailed:
+            return "Rewrite failed"
+        }
     }
 }
 
