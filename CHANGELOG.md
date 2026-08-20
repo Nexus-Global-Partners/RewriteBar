@@ -5,6 +5,7 @@
 * Adds an optional Codex Luna online processing mode backed by a user's ChatGPT subscription, while keeping the bundled Qwen model as the default.
 * Isolates RewriteBar's Codex sign-in and ephemeral rewrite threads from the user's other Codex projects, tools, skills, and configuration.
 * Gives Luna a short first attempt inside the existing rewrite deadline, then retries automatically with the warmed on-device model when Codex, the network, the account, the model, or the response is unavailable.
+* Prepares the isolated Luna runtime when online mode is selected, briefly reuses verified account and model readiness, and scales the online attempt so short rewrites fall back faster without weakening output quality.
 * Applies the same source-instruction protection, output cleanup, custom preferences, and meaning validation to both processing modes.
 * Adds explicit online-processing disclosure, managed Codex connection status, and a local restore default in Settings without changing the menu bar popover.
 * Keeps the Option R shortcut connected to the active editor when macOS temporarily omits the focused application from its system wide Accessibility object.

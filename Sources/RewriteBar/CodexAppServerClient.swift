@@ -120,9 +120,15 @@ private enum CodexTurnEvent: Sendable {
 actor CodexAppServerClient {
     static let shared = CodexAppServerClient()
 
+    private struct CachedAccountSnapshot: Sendable {
+        let value: CodexAccountSnapshot
+        let expiresAt: Date
+    }
+
     private let locator: CodexExecutableLocator
     private let fileManager: FileManager
     private let homeURLOverride: URL?
+    private let accountSnapshotCacheLifetime: TimeInterval
     private var process: Process?
     private var processGeneration: UUID?
     private var inputHandle: FileHandle?
@@ -134,6 +140,7 @@ actor CodexAppServerClient {
     private var pendingRequestMethods: [Int: String] = [:]
     private var initialized = false
     private var initializationTask: Task<Void, any Error>?
+    private var cachedAccountSnapshot: CachedAccountSnapshot?
     private var turnReserved = false
     private var activeThreadID: String?
     private var activeTurnID: String?
@@ -145,21 +152,32 @@ actor CodexAppServerClient {
     init(
         locator: CodexExecutableLocator = CodexExecutableLocator(),
         fileManager: FileManager = .default,
-        homeURL: URL? = nil
+        homeURL: URL? = nil,
+        accountSnapshotCacheLifetime: TimeInterval = 300
     ) {
         self.locator = locator
         self.fileManager = fileManager
         homeURLOverride = homeURL
+        self.accountSnapshotCacheLifetime = max(0, accountSnapshotCacheLifetime)
     }
 
-    func accountSnapshot() async throws -> CodexAccountSnapshot {
+    func accountSnapshot(forceRefresh: Bool = false) async throws -> CodexAccountSnapshot {
+        if !forceRefresh,
+           let cachedAccountSnapshot,
+           cachedAccountSnapshot.expiresAt > Date() {
+            return cachedAccountSnapshot.value
+        }
+
         try await ensureInitialized()
         let accountResult = try await request(method: "account/read")
         guard let account = accountResult.objectValue?["account"],
               account != .null else {
-            return .disconnected
+            let snapshot = CodexAccountSnapshot.disconnected
+            cacheAccountSnapshot(snapshot)
+            return snapshot
         }
         guard account.objectValue?["type"]?.stringValue?.lowercased() == "chatgpt" else {
+            cachedAccountSnapshot = nil
             throw CodexRewriteError.notConnected
         }
 
@@ -180,15 +198,18 @@ actor CodexAppServerClient {
             }) ?? false
 
         let limits = try? await request(method: "account/rateLimits/read")
-        return CodexAccountSnapshot(
+        let snapshot = CodexAccountSnapshot(
             isConnected: true,
             plan: account.firstString(forKeys: ["planType", "plan", "type"]),
             lunaAvailable: lunaAvailable,
             usedPercent: limits?.firstNumber(forKeys: ["usedPercent"])
         )
+        cacheAccountSnapshot(snapshot)
+        return snapshot
     }
 
     func beginChatGPTLogin() async throws -> CodexLoginRequest {
+        cachedAccountSnapshot = nil
         try await ensureInitialized()
         let result = try await request(
             method: "account/login/start",
@@ -205,6 +226,7 @@ actor CodexAppServerClient {
     func logout() async throws {
         try await ensureInitialized()
         _ = try await request(method: "account/logout")
+        cachedAccountSnapshot = nil
     }
 
     func rewrite(
@@ -217,9 +239,16 @@ actor CodexAppServerClient {
         defer { turnReserved = false }
 
         let account = try await accountSnapshot()
-        guard account.isConnected else { throw CodexRewriteError.notConnected }
-        guard account.lunaAvailable else { throw CodexRewriteError.lunaUnavailable }
+        guard account.isConnected else {
+            cachedAccountSnapshot = nil
+            throw CodexRewriteError.notConnected
+        }
+        guard account.lunaAvailable else {
+            cachedAccountSnapshot = nil
+            throw CodexRewriteError.lunaUnavailable
+        }
         if let usedPercent = account.usedPercent, usedPercent >= 100 {
+            cachedAccountSnapshot = nil
             throw CodexRewriteError.usageLimitReached
         }
 
@@ -311,6 +340,17 @@ actor CodexAppServerClient {
     func shutdown() {
         failAllPending(with: CodexRewriteError.transportUnavailable)
         stopProcess()
+    }
+
+    private func cacheAccountSnapshot(_ snapshot: CodexAccountSnapshot) {
+        guard accountSnapshotCacheLifetime > 0 else {
+            cachedAccountSnapshot = nil
+            return
+        }
+        cachedAccountSnapshot = CachedAccountSnapshot(
+            value: snapshot,
+            expiresAt: Date().addingTimeInterval(accountSnapshotCacheLifetime)
+        )
     }
 
     private static let outputSchema: CodexJSONValue = .object([
@@ -777,6 +817,7 @@ actor CodexAppServerClient {
         initialized = false
         initializationTask?.cancel()
         initializationTask = nil
+        cachedAccountSnapshot = nil
         outputBuffer.removeAll(keepingCapacity: true)
     }
 }

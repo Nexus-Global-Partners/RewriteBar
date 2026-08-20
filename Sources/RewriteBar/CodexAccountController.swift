@@ -77,7 +77,7 @@ final class CodexAccountController: ObservableObject {
         task = Task { [client] in
             do {
                 let snapshot = try await withCodexAccountDeadline {
-                    try await client.accountSnapshot()
+                    try await client.accountSnapshot(forceRefresh: true)
                 }
                 guard !Task.isCancelled else { return }
                 if snapshot.isConnected {
@@ -113,7 +113,7 @@ final class CodexAccountController: ObservableObject {
                 for _ in 0..<60 {
                     try await Task.sleep(for: .seconds(1.5))
                     let snapshot = try await withCodexAccountDeadline {
-                        try await client.accountSnapshot()
+                        try await client.accountSnapshot(forceRefresh: true)
                     }
                     guard !Task.isCancelled else { return }
                     if snapshot.isConnected {

@@ -535,6 +535,14 @@ enum RewriteCoreChecks {
             "The optional Codex model must remain pinned to Luna."
         )
         try require(
+            CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 20) < 5,
+            "Short Luna attempts should preserve time for immediate local fallback."
+        )
+        try require(
+            CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 2_000) == 6.5,
+            "Long Luna attempts must remain tightly bounded."
+        )
+        try require(
             RewritePromptBuilder.maximumOutputTokens(for: "Short") == 64,
             "Short output budget is incorrect."
         )

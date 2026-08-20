@@ -86,6 +86,13 @@ func providerRouterPreservesTimeForTheLocalFallback() async throws {
 }
 
 @Test
+func codexAttemptPolicyScalesWithinTheFallbackBudget() {
+    #expect(CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 20) == 4.77)
+    #expect(CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 2_000) == 6.5)
+    #expect(CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 20_000) == 6.5)
+}
+
+@Test
 func providerRouterNeverFallsBackAfterUserCancellation() async throws {
     let local = ProviderGeneratorStub(behavior: .output("Local"))
     let codex = ProviderGeneratorStub(
@@ -117,6 +124,40 @@ func providerRouterNeverFallsBackAfterUserCancellation() async throws {
         #expect(error == .cancelled)
     }
     #expect(await local.requestCount == 0)
+}
+
+@Test
+func liveCodexLunaUsesTheIsolatedPersistentAppServer() async throws {
+    guard ProcessInfo.processInfo.environment["REWRITEBAR_RUN_LIVE_CODEX_TEST"] == "1" else {
+        return
+    }
+
+    let client = CodexAppServerClient()
+    let service = CodexRewriteService(client: client)
+    await service.warmUp()
+
+    let request = RewriteRequest(
+        text: "The report are ready, and we can send it on Friday.",
+        intensity: 3,
+        provider: .codexLuna
+    )
+    let clock = ContinuousClock()
+    let startedAt = clock.now
+    let output: String
+    do {
+        output = try await service.rewrite(request: request, onProgress: nil)
+    } catch {
+        await client.shutdown()
+        throw error
+    }
+    let duration = startedAt.duration(to: clock.now)
+    await client.shutdown()
+
+    print("Live persistent Luna rewrite duration: \(duration)")
+
+    #expect(output.contains("Friday"))
+    #expect(!output.isEmpty)
+    #expect(duration < .seconds(18))
 }
 
 @Test
@@ -290,8 +331,9 @@ func appServerClientUsesTheRestrictedLunaProtocol() async throws {
 
     let accountModeURL = fixtureHome.appendingPathComponent("fixture-account-mode")
     try Data("apiKey".utf8).write(to: accountModeURL)
+    #expect(try await client.accountSnapshot().isConnected)
     do {
-        _ = try await client.accountSnapshot()
+        _ = try await client.accountSnapshot(forceRefresh: true)
         Issue.record("An API-key Codex account was accepted as ChatGPT.")
     } catch let error as CodexRewriteError {
         #expect(error == .notConnected)
@@ -299,18 +341,19 @@ func appServerClientUsesTheRestrictedLunaProtocol() async throws {
     try fileManager.removeItem(at: accountModeURL)
 
     try Data("disconnected".utf8).write(to: accountModeURL)
-    #expect(try await client.accountSnapshot() == .disconnected)
+    #expect(try await client.accountSnapshot(forceRefresh: true) == .disconnected)
     try fileManager.removeItem(at: accountModeURL)
 
     let modelModeURL = fixtureHome.appendingPathComponent("fixture-model-mode")
     try Data("missing".utf8).write(to: modelModeURL)
-    let missingModelAccount = try await client.accountSnapshot()
+    let missingModelAccount = try await client.accountSnapshot(forceRefresh: true)
     #expect(missingModelAccount.isConnected)
     #expect(!missingModelAccount.lunaAvailable)
     try fileManager.removeItem(at: modelModeURL)
 
     let limitModeURL = fixtureHome.appendingPathComponent("fixture-limit-mode")
     try Data("exhausted".utf8).write(to: limitModeURL)
+    #expect(try await client.accountSnapshot(forceRefresh: true).usedPercent == 100)
     do {
         _ = try await client.rewrite(
             systemPrompt: "System rules",

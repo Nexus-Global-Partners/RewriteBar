@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var shortcutSettingsObservation: AnyCancellable?
     private var shortcutRecordingBeginObservation: AnyCancellable?
     private var shortcutRecordingEndObservation: AnyCancellable?
+    private var providerSettingsObservation: AnyCancellable?
     private var codexAccountObservation: AnyCancellable?
     private var previousCodexAccountState: CodexAccountController.State = .idle
     private var statusFeedbackTask: Task<Void, Never>?
@@ -34,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         configurePopover()
         configureStatusItem()
         configureShortcutFlow()
+        configureProviderWarmup()
         configureCodexConnectionFeedback()
         logger.notice("Application launched")
     }
@@ -195,6 +197,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .sink { [weak self] _ in
                 guard let self else { return }
                 registerGlobalShortcut(settings.keyboardShortcut)
+            }
+    }
+
+    private func configureProviderWarmup() {
+        providerSettingsObservation = settings.$rewriteProvider
+            .removeDuplicates()
+            .sink { provider in
+                guard provider == .codexLuna else { return }
+                Task.detached(priority: .utility) {
+                    await CodexRewriteService.shared.warmUp()
+                }
             }
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import RewriteCore
 
 actor CodexRewriteService: RewriteGenerating {
@@ -6,9 +7,25 @@ actor CodexRewriteService: RewriteGenerating {
 
     private let client: CodexAppServerClient
     private let generationArbiter = GenerationArbiter()
+    private let logger = Logger(
+        subsystem: AppConstants.bundleIdentifier,
+        category: "CodexRewriteService"
+    )
 
     init(client: CodexAppServerClient) {
         self.client = client
+    }
+
+    func warmUp() async {
+        do {
+            let snapshot = try await client.accountSnapshot()
+            guard snapshot.isConnected, snapshot.lunaAvailable else { return }
+            logger.notice("Codex Luna is ready for a foreground rewrite")
+        } catch is CancellationError {
+            return
+        } catch {
+            logger.notice("Codex Luna warm-up is unavailable; local fallback remains ready")
+        }
     }
 
     func rewrite(

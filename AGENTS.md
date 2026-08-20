@@ -56,11 +56,11 @@ The slider badge must remain inside its container at 0 and 10. Preserve keyboard
 * `Sources/RewriteBar/GlassyIntensitySlider.swift` owns slider and progress rail rendering.
 * `Sources/RewriteBar/PrimaryActionButton.swift` owns the action, loading, and confirmation presentation.
 * `Sources/RewriteBar/RewriteEngine.swift` gives every interaction one normalized, time bounded generation interface.
-* `Sources/RewriteBar/RewriteProviderRouter.swift` selects the requested provider, bounds Luna's first attempt, and owns local fallback.
+* `Sources/RewriteBar/RewriteProviderRouter.swift` selects the requested provider, applies the input-scaled Luna attempt budget, and owns local fallback.
 * `Sources/RewriteBar/GenerationArbiter.swift` serializes shared model access and removes cancelled requests from its queue.
 * `Sources/RewriteBar/LocalModelService.swift` loads the model, streams local generation, validates meaning signals, retries personalized output that is visibly undercorrected, and applies the safe source fallback.
 * `Sources/RewriteBar/CodexExecutableLocator.swift` accepts only the signed official OpenAI ChatGPT or Codex application runtime.
-* `Sources/RewriteBar/CodexAppServerClient.swift` owns the isolated Codex subprocess, account and model discovery, managed login, restricted ephemeral turns, streaming, and interruption.
+* `Sources/RewriteBar/CodexAppServerClient.swift` owns the isolated Codex subprocess, brief account and model readiness caching, managed login, restricted ephemeral turns, streaming, and interruption.
 * `Sources/RewriteBar/CodexRewriteService.swift` builds protected Luna requests and applies the shared output policy.
 * `Sources/RewriteBar/CodexAccountController.swift` presents connection state without storing credentials in app preferences.
 * `Sources/RewriteBar/SelectedTextRewriteCoordinator.swift` owns shortcut generation, timeout, safe replacement, copy completion, and failures.
