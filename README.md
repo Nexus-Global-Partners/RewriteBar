@@ -210,7 +210,7 @@ API latency went from 180 ms to 640 ms between 09:10 and 09:35 UTC only in eu we
 * `RewriteSettingsStore` keeps preferences local and `SettingsView` provides the native settings experience.
 * AppKit owns the persistent menu bar item, global shortcut, status feedback, and popover lifecycle. SwiftUI provides the compact content, VoiceOver labels, and adaptive materials.
 
-RewriteBar is designed for messages, emails, and short passages. Inputs longer than 2,000 visible characters are rejected immediately so both interactions stay responsive and predictable. Accepted work is bounded to 18 seconds. Local generation is deterministic with thinking disabled; Luna uses low reasoning effort and structured output.
+RewriteBar is designed for messages, emails, and short passages. Inputs longer than 2,000 visible characters are rejected immediately so both interactions stay responsive and predictable. Accepted work is bounded to 18 seconds. Local generation is deterministic with thinking disabled; Luna skips extra reasoning delay and uses structured output.
 
 ## Contribute
 

@@ -87,9 +87,60 @@ func providerRouterPreservesTimeForTheLocalFallback() async throws {
 
 @Test
 func codexAttemptPolicyScalesWithinTheFallbackBudget() {
-    #expect(CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 20) == 4.77)
-    #expect(CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 2_000) == 6.5)
-    #expect(CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 20_000) == 6.5)
+    #expect(CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 20) == 7.01)
+    #expect(CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 2_000) == 8.0)
+    #expect(CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 20_000) == 8.0)
+}
+
+@Test
+func providerRouterRetriesAnUnchangedOnlineResultLocally() async throws {
+    let local = ProviderGeneratorStub(behavior: .output("Local rewrite"))
+    let codex = ProviderGeneratorStub(behavior: .output("Source"))
+    let router = RewriteProviderRouter(local: local, codex: codex)
+
+    let result = try await router.rewrite(
+        request: RewriteRequest(
+            text: "Source",
+            intensity: 3,
+            provider: .codexLuna
+        ),
+        onProgress: nil
+    )
+
+    #expect(result == "Local rewrite")
+    #expect(await codex.requestCount == 1)
+    #expect(await local.requestCount == 1)
+}
+
+@Test
+func providerRouterRejectsAnUnchangedLocalRewrite() async throws {
+    let local = ProviderGeneratorStub(behavior: .output("Source"))
+    let codex = ProviderGeneratorStub(behavior: .output("Unused"))
+    let router = RewriteProviderRouter(local: local, codex: codex)
+
+    do {
+        _ = try await router.rewrite(
+            request: RewriteRequest(text: "Source", intensity: 3),
+            onProgress: nil
+        )
+        Issue.record("An unchanged rewrite was reported as successful.")
+    } catch let error as RewriteError {
+        #expect(error == .generationFailed)
+    }
+}
+
+@Test
+func providerRouterAllowsAnUnchangedProofreadResult() async throws {
+    let local = ProviderGeneratorStub(behavior: .output("Already correct."))
+    let codex = ProviderGeneratorStub(behavior: .output("Unused"))
+    let router = RewriteProviderRouter(local: local, codex: codex)
+
+    let result = try await router.rewrite(
+        request: RewriteRequest(text: "Already correct.", intensity: 0),
+        onProgress: nil
+    )
+
+    #expect(result == "Already correct.")
 }
 
 @Test
@@ -578,7 +629,7 @@ for line in sys.stdin:
         valid = (
             params.get("threadId") == "thread-fixture"
             and params.get("model") == "gpt-5.6-luna"
-            and params.get("effort") == "low"
+            and params.get("effort") == "none"
             and params.get("approvalPolicy") == "never"
             and params.get("sandboxPolicy") == {
                 "type": "readOnly", "networkAccess": False

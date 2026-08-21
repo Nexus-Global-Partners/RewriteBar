@@ -50,6 +50,13 @@ struct RewriteProviderRouter: RewriteGenerating, Sendable {
                 request: request,
                 onProgress: onProgress
             )
+            guard RewriteOutputQualityPolicy.isVisibleCompletion(
+                source: request.text,
+                output: output,
+                intensity: request.intensity
+            ) else {
+                throw RewriteError.generationFailed
+            }
             logger.notice(
                 "On-device rewrite completed in \(Date().timeIntervalSince(startedAt), privacy: .public) seconds"
             )
@@ -78,6 +85,13 @@ struct RewriteProviderRouter: RewriteGenerating, Sendable {
                 }
                 return result
             }
+            guard RewriteOutputQualityPolicy.isVisibleCompletion(
+                source: request.text,
+                output: output,
+                intensity: request.intensity
+            ) else {
+                throw RewriteError.generationFailed
+            }
             logger.notice(
                 "Codex Luna rewrite completed in \(Date().timeIntervalSince(onlineStartedAt), privacy: .public) seconds"
             )
@@ -96,6 +110,13 @@ struct RewriteProviderRouter: RewriteGenerating, Sendable {
                 request: request,
                 onProgress: onProgress
             )
+            guard RewriteOutputQualityPolicy.isVisibleCompletion(
+                source: request.text,
+                output: output,
+                intensity: request.intensity
+            ) else {
+                throw RewriteError.generationFailed
+            }
             logger.notice(
                 "On-device fallback completed in \(Date().timeIntervalSince(fallbackStartedAt), privacy: .public) seconds"
             )

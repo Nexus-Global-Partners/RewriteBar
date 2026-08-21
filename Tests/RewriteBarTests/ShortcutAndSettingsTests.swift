@@ -90,6 +90,15 @@ func shortcutFailureFeedbackExplainsWhatTheUserCanDoNext() {
     )
 }
 
+@Test
+func shortcutCopyOnlyFeedbackNeverLooksLikeReplacementSuccess() {
+    #expect(ShortcutCopyOnlyFeedbackPolicy.title == "Copied")
+    #expect(ShortcutCopyOnlyFeedbackPolicy.fontSize == 11)
+    let toolTip = ShortcutCopyOnlyFeedbackPolicy.toolTip(for: .selectionChanged)
+    #expect(toolTip.contains("not replaced"))
+    #expect(toolTip.contains("clipboard"))
+}
+
 @Test @MainActor
 func accessibilityPrefersTheSystemWideFocusedElementForTheActiveProcess() {
     #expect(

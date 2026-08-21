@@ -167,7 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             guard let self else { return }
             clipboard.writePlainText(output)
             logger.notice("Shortcut selection replaced and copied")
-            showShortcutSuccess(replacedSelection: true)
+            showShortcutSuccess()
         }
         shortcutCoordinator.onCopyOnlyCompletion = { [weak self] output, failure in
             guard let self else { return }
@@ -175,7 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             logger.notice(
                 "Shortcut result copied after replacement was unavailable: \(failure.localizedDescription, privacy: .public)"
             )
-            showShortcutSuccess(replacedSelection: false)
+            showShortcutCopyOnly(failure: failure)
         }
         shortcutCoordinator.onFailure = { [weak self] failure in
             self?.showShortcutFailure(failure)
@@ -277,17 +277,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         )
     }
 
-    private func showShortcutSuccess(replacedSelection: Bool) {
+    private func showShortcutSuccess() {
         NSHapticFeedbackManager.defaultPerformer.perform(
             .alignment,
             performanceTime: .now
         )
         showTemporaryStatus(
             title: "✓",
-            toolTip: replacedSelection
-                ? "Selection rewritten and copied"
-                : "Rewrite copied to the clipboard",
+            toolTip: "Selection rewritten and copied",
             duration: .milliseconds(1_500)
+        )
+    }
+
+    private func showShortcutCopyOnly(failure: AccessibilityRewriteFailure) {
+        showTemporaryStatus(
+            title: ShortcutCopyOnlyFeedbackPolicy.title,
+            toolTip: ShortcutCopyOnlyFeedbackPolicy.toolTip(for: failure),
+            duration: .seconds(3),
+            length: NSStatusItem.variableLength,
+            fontSize: ShortcutCopyOnlyFeedbackPolicy.fontSize
         )
     }
 
@@ -508,6 +516,15 @@ enum ShortcutFailureFeedbackPolicy {
         case .rewriteFailed:
             return "Rewrite failed"
         }
+    }
+}
+
+enum ShortcutCopyOnlyFeedbackPolicy {
+    static let title = "Copied"
+    static let fontSize: CGFloat = 11
+
+    static func toolTip(for failure: AccessibilityRewriteFailure) -> String {
+        "The selection was not replaced. The rewrite is on the clipboard. \(failure.localizedDescription)"
     }
 }
 

@@ -535,12 +535,28 @@ enum RewriteCoreChecks {
             "The optional Codex model must remain pinned to Luna."
         )
         try require(
-            CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 20) < 5,
-            "Short Luna attempts should preserve time for immediate local fallback."
+            CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 20) == 7.01,
+            "Short Luna attempts should finish healthy work without consuming the overall deadline."
         )
         try require(
-            CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 2_000) == 6.5,
-            "Long Luna attempts must remain tightly bounded."
+            CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 2_000) == 8.0,
+            "Long Luna attempts must leave time for the warmed local fallback."
+        )
+        try require(
+            !RewriteOutputQualityPolicy.isVisibleCompletion(
+                source: "Rewrite this",
+                output: "Rewrite this",
+                intensity: 3
+            ),
+            "An unchanged rewrite must not be reported as a visible completion."
+        )
+        try require(
+            RewriteOutputQualityPolicy.isVisibleCompletion(
+                source: "Already correct.",
+                output: "Already correct.",
+                intensity: 0
+            ),
+            "Proofreading may legitimately leave already correct text unchanged."
         )
         try require(
             RewritePromptBuilder.maximumOutputTokens(for: "Short") == 64,

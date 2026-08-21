@@ -292,7 +292,7 @@ actor CodexAppServerClient {
                         ])
                     ]),
                     "model": .string(AppConstants.codexLunaModelIdentifier),
-                    "effort": .string("low"),
+                    "effort": .string("none"),
                     "summary": .string("none"),
                     "approvalPolicy": .string("never"),
                     "sandboxPolicy": .object([

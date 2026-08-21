@@ -178,13 +178,35 @@ final class AccessibilitySelectionClient {
                 on: focused.element,
                 to: replacement as CFString
             )
+            guard try selectedTextReplacementIsConfirmed(
+                on: focused.element,
+                replacement: replacement
+            ) else {
+                throw AccessibilityRewriteFailure.selectionNotEditable
+            }
 
         case .selectedTextWithPlainTextFallback(let originalValue):
+            guard let updatedValue = Self.replacingText(
+                in: originalValue,
+                range: snapshot.originalRange,
+                with: replacement
+            ) else {
+                throw AccessibilityRewriteFailure.selectionNotEditable
+            }
             do {
                 try setAttribute(
                     kAXSelectedTextAttribute,
                     on: focused.element,
                     to: replacement as CFString
+                )
+                if try plainTextValueIsConfirmed(
+                    on: focused.element,
+                    expectedValue: updatedValue
+                ) {
+                    return
+                }
+                logger.notice(
+                    "Direct selection replacement was accepted but not applied; trying the editable text value"
                 )
             } catch let failure as AccessibilityRewriteFailure {
                 guard failure != .permissionRequired else {
@@ -193,13 +215,13 @@ final class AccessibilitySelectionClient {
                 logger.notice(
                     "Direct selection replacement was unavailable; trying the editable text value: \(failure.localizedDescription, privacy: .public)"
                 )
-                try replacePlainTextValue(
-                    on: focused.element,
-                    originalValue: originalValue,
-                    range: snapshot.originalRange,
-                    with: replacement
-                )
             }
+            try replacePlainTextValue(
+                on: focused.element,
+                originalValue: originalValue,
+                range: snapshot.originalRange,
+                with: replacement
+            )
 
         case .plainTextValue(let originalValue):
             try replacePlainTextValue(
@@ -548,6 +570,46 @@ final class AccessibilitySelectionClient {
             on: element,
             to: updatedValue as CFString
         )
+        guard try plainTextValueIsConfirmed(
+            on: element,
+            expectedValue: updatedValue
+        ) else {
+            throw AccessibilityRewriteFailure.selectionNotEditable
+        }
+    }
+
+    private func selectedTextReplacementIsConfirmed(
+        on element: AXUIElement,
+        replacement: String
+    ) throws -> Bool {
+        for attempt in 0..<4 {
+            let selectedText: String? = try optionalAttribute(
+                kAXSelectedTextAttribute,
+                from: element
+            )
+            if selectedText == replacement {
+                return true
+            }
+            if attempt < 3 {
+                Thread.sleep(forTimeInterval: 0.01)
+            }
+        }
+        return false
+    }
+
+    private func plainTextValueIsConfirmed(
+        on element: AXUIElement,
+        expectedValue: String
+    ) throws -> Bool {
+        for attempt in 0..<4 {
+            if try stringValue(from: element) == expectedValue {
+                return true
+            }
+            if attempt < 3 {
+                Thread.sleep(forTimeInterval: 0.01)
+            }
+        }
+        return false
     }
 
     private func selectedTextRange(from element: AXUIElement) throws -> CFRange {
