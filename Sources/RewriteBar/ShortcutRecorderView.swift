@@ -1,6 +1,15 @@
 import AppKit
 import SwiftUI
 
+extension Notification.Name {
+    static let rewriteBarShortcutRecordingDidBegin = Notification.Name(
+        "RewriteBarShortcutRecordingDidBegin"
+    )
+    static let rewriteBarShortcutRecordingDidEnd = Notification.Name(
+        "RewriteBarShortcutRecordingDidEnd"
+    )
+}
+
 struct ShortcutRecorderView: NSViewRepresentable {
     @Binding var shortcut: GlobalShortcut?
 
@@ -51,6 +60,10 @@ final class ShortcutRecorderButton: NSButton {
         if resigned && isRecording {
             isRecording = false
             updatePresentation()
+            NotificationCenter.default.post(
+                name: .rewriteBarShortcutRecordingDidEnd,
+                object: self
+            )
         }
         return resigned
     }
@@ -92,15 +105,29 @@ final class ShortcutRecorderButton: NSButton {
     }
 
     @objc private func beginRecording() {
+        guard !isRecording else { return }
         isRecording = true
-        window?.makeFirstResponder(self)
         updatePresentation()
+        guard window?.makeFirstResponder(self) == true else {
+            isRecording = false
+            updatePresentation()
+            return
+        }
+        NotificationCenter.default.post(
+            name: .rewriteBarShortcutRecordingDidBegin,
+            object: self
+        )
     }
 
     private func finishRecording(with value: GlobalShortcut?) {
+        guard isRecording else { return }
         isRecording = false
         shortcut = value
         onChange?(value)
+        NotificationCenter.default.post(
+            name: .rewriteBarShortcutRecordingDidEnd,
+            object: self
+        )
         window?.makeFirstResponder(nil)
     }
 

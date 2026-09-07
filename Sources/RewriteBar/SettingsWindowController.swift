@@ -21,7 +21,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         self.presentation = presentation
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 590),
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 620),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false

@@ -556,6 +556,14 @@ public enum RewriteOutputQualityPolicy {
         return retainedMechanicalErrors || introducedFragment
     }
 
+    public static func isVisibleCompletion(
+        source: String,
+        output: String,
+        intensity: Int
+    ) -> Bool {
+        RewriteIntensityPolicy.clampedLevel(intensity) == 0 || source != output
+    }
+
     private static func containsObviousMechanicalIssue(_ value: String) -> Bool {
         value.range(
             of: obviousMechanicalIssuePattern,

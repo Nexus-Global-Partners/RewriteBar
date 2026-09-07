@@ -6,6 +6,174 @@ import Testing
 @testable import RewriteBar
 
 @Test @MainActor
+func shortcutRecorderSuspendsAndRestoresGlobalRegistration() {
+    let button = ShortcutRecorderButton()
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 220, height: 60),
+        styleMask: [.titled],
+        backing: .buffered,
+        defer: false
+    )
+    window.contentView = button
+
+    let beginCount = NotificationCounter()
+    let endCount = NotificationCounter()
+    let center = NotificationCenter.default
+    let beginObserver = center.addObserver(
+        forName: .rewriteBarShortcutRecordingDidBegin,
+        object: button,
+        queue: nil
+    ) { _ in
+        beginCount.value += 1
+    }
+    let endObserver = center.addObserver(
+        forName: .rewriteBarShortcutRecordingDidEnd,
+        object: button,
+        queue: nil
+    ) { _ in
+        endCount.value += 1
+    }
+    defer {
+        center.removeObserver(beginObserver)
+        center.removeObserver(endObserver)
+    }
+
+    button.performClick(nil)
+    #expect(button.isRecording)
+    #expect(beginCount.value == 1)
+
+    _ = window.makeFirstResponder(nil)
+    #expect(!button.isRecording)
+    #expect(endCount.value == 1)
+}
+
+@Test @MainActor
+func codexConnectionFeedbackAppearsOnlyAfterAReadyConnection() {
+    #expect(
+        CodexConnectionFeedbackPolicy.showsConfirmation(
+            previous: .connecting,
+            current: .connected(plan: "pro", lunaAvailable: true)
+        )
+    )
+    #expect(
+        !CodexConnectionFeedbackPolicy.showsConfirmation(
+            previous: .checking,
+            current: .connected(plan: "pro", lunaAvailable: true)
+        )
+    )
+    #expect(
+        !CodexConnectionFeedbackPolicy.showsConfirmation(
+            previous: .connecting,
+            current: .connected(plan: "pro", lunaAvailable: false)
+        )
+    )
+}
+
+@Test
+func shortcutFailureFeedbackExplainsWhatTheUserCanDoNext() {
+    #expect(ShortcutFailureFeedbackPolicy.fontSize == 11)
+    #expect(
+        ShortcutFailureFeedbackPolicy.title(for: .noFocusedApplication)
+            == "Select text"
+    )
+    #expect(
+        ShortcutFailureFeedbackPolicy.title(for: .noFocusedElement)
+            == "Select text"
+    )
+    #expect(
+        ShortcutFailureFeedbackPolicy.title(for: .permissionRequired)
+            == "Set Up"
+    )
+    #expect(
+        ShortcutFailureFeedbackPolicy.title(for: .selectionNotEditable)
+            == "Not editable"
+    )
+}
+
+@Test
+func shortcutCopyOnlyFeedbackNeverLooksLikeReplacementSuccess() {
+    #expect(ShortcutCopyOnlyFeedbackPolicy.title == "Copied")
+    #expect(ShortcutCopyOnlyFeedbackPolicy.fontSize == 11)
+    let toolTip = ShortcutCopyOnlyFeedbackPolicy.toolTip(for: .selectionChanged)
+    #expect(toolTip.contains("not replaced"))
+    #expect(toolTip.contains("clipboard"))
+}
+
+@Test @MainActor
+func accessibilityPrefersTheSystemWideFocusedElementForTheActiveProcess() {
+    #expect(
+        AccessibilitySelectionClient.shouldUseSystemWideFocusedElement(
+            elementProcessIdentifier: 2468,
+            focusedProcessIdentifier: 2468
+        )
+    )
+    #expect(
+        !AccessibilitySelectionClient.shouldUseSystemWideFocusedElement(
+            elementProcessIdentifier: 9753,
+            focusedProcessIdentifier: 2468
+        )
+    )
+    #expect(
+        !AccessibilitySelectionClient.shouldUseSystemWideFocusedElement(
+            elementProcessIdentifier: nil,
+            focusedProcessIdentifier: 2468
+        )
+    )
+}
+
+@Test @MainActor
+func accessibilityFindsAUniqueEditableSelectionBelowTheFocusedWindow() throws {
+    let children = [
+        0: [1, 2],
+        1: [3],
+        2: [],
+        3: []
+    ]
+
+    let candidate = try AccessibilitySelectionClient.uniqueSelectionCandidate(
+        roots: [0],
+        children: { children[$0] ?? [] },
+        hasEditableSelection: { $0 == 3 }
+    )
+
+    #expect(candidate == 3)
+}
+
+@Test @MainActor
+func accessibilityRefusesAmbiguousWindowSelectionFallback() {
+    #expect(throws: AccessibilityRewriteFailure.multipleSelectionsUnsupported) {
+        _ = try AccessibilitySelectionClient.uniqueSelectionCandidate(
+            roots: [0],
+            children: { $0 == 0 ? [1, 2] : [] },
+            hasEditableSelection: { $0 == 1 || $0 == 2 }
+        )
+    }
+}
+
+@Test @MainActor
+func accessibilityRefusesAnIncompleteWindowSelectionScan() {
+    #expect(throws: AccessibilityRewriteFailure.selectionUnavailable) {
+        _ = try AccessibilitySelectionClient.uniqueSelectionCandidate(
+            roots: [0],
+            maximumVisitedElements: 2,
+            children: { $0 == 0 ? [1, 2] : [] },
+            hasEditableSelection: { $0 == 1 || $0 == 2 }
+        )
+    }
+}
+
+@Test @MainActor
+func accessibilityAcceptsACompleteScanAtItsLimit() throws {
+    let candidate = try AccessibilitySelectionClient.uniqueSelectionCandidate(
+        roots: [0],
+        maximumVisitedElements: 2,
+        children: { $0 == 0 ? [1] : [] },
+        hasEditableSelection: { $0 == 1 }
+    )
+    #expect(candidate == 1)
+}
+
+@Test @MainActor
 func settingsEnabledStatusAdaptsToLightAndDarkAppearances() throws {
     let lightAppearance = try #require(NSAppearance(named: .aqua))
     let darkAppearance = try #require(NSAppearance(named: .darkAqua))
@@ -42,6 +210,7 @@ func settingsUseProductDefaultsAndPersistChanges() throws {
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
     let store = RewriteSettingsStore(defaults: defaults)
+    #expect(store.rewriteProvider == .codexLuna)
     #expect(store.defaultIntensity == 3)
     #expect(store.writingStyle == .rewriteBar)
     #expect(store.keyboardShortcut == .rewriteDefault)
@@ -52,6 +221,7 @@ func settingsUseProductDefaultsAndPersistChanges() throws {
     #expect(!store.customInstructionsExclusive)
 
     store.defaultIntensity = 14
+    store.rewriteProvider = .codexLuna
     store.writingStyle = .clear
     store.keyboardShortcut = nil
     store.customInstructionsEnabled = true
@@ -59,6 +229,7 @@ func settingsUseProductDefaultsAndPersistChanges() throws {
     store.saveCustomInstructions("  Keep it direct.  ")
 
     let reloaded = RewriteSettingsStore(defaults: defaults)
+    #expect(reloaded.rewriteProvider == .codexLuna)
     #expect(reloaded.defaultIntensity == 10)
     #expect(reloaded.writingStyle == .clear)
     #expect(reloaded.keyboardShortcut == nil)
@@ -71,6 +242,7 @@ func settingsUseProductDefaultsAndPersistChanges() throws {
     #expect(!reloaded.customInstructionsExclusive)
 
     reloaded.resetAll()
+    #expect(reloaded.rewriteProvider == .codexLuna)
     #expect(reloaded.keyboardShortcut == .rewriteDefault)
     #expect(reloaded.keyboardShortcut?.displayName == "⌥R")
 }
@@ -166,7 +338,48 @@ func accessibilityRangeHelpersRejectInvalidEditorRanges() {
 }
 
 @Test @MainActor
-func accessibilitySelectionPlanUsesDirectReplacementWhenSelectedTextIsAvailable() throws {
+func accessibilityFocusedApplicationFallsBackToTheFrontmostProcess() throws {
+    let resolved = try AccessibilitySelectionClient
+        .focusedApplicationProcessIdentifier(
+            accessibilityProcessIdentifier: nil,
+            frontmostProcessIdentifier: 2468,
+            currentProcessIdentifier: 1357
+        )
+
+    #expect(resolved == 2468)
+}
+
+@Test @MainActor
+func accessibilityFocusedApplicationPrefersTheSystemWideProcess() throws {
+    let resolved = try AccessibilitySelectionClient
+        .focusedApplicationProcessIdentifier(
+            accessibilityProcessIdentifier: 9753,
+            frontmostProcessIdentifier: 2468,
+            currentProcessIdentifier: 1357
+        )
+
+    #expect(resolved == 9753)
+}
+
+@Test @MainActor
+func accessibilityFocusedApplicationRejectsRewriteBarItself() {
+    do {
+        _ = try AccessibilitySelectionClient
+            .focusedApplicationProcessIdentifier(
+                accessibilityProcessIdentifier: 1357,
+                frontmostProcessIdentifier: 1357,
+                currentProcessIdentifier: 1357
+            )
+        Issue.record("RewriteBar accepted itself as the editing application.")
+    } catch let failure as AccessibilityRewriteFailure {
+        #expect(failure == .noFocusedApplication)
+    } catch {
+        Issue.record("Focused application resolution returned an unexpected error.")
+    }
+}
+
+@Test @MainActor
+func accessibilitySelectionPlanKeepsAPlainTextFallbackWhenAvailable() throws {
     let fullText = "Before selected after"
     let selectedRange = CFRange(location: 7, length: 8)
     let plan = try AccessibilitySelectionClient.selectionPlan(
@@ -177,7 +390,10 @@ func accessibilitySelectionPlanUsesDirectReplacementWhenSelectedTextIsAvailable(
     )
 
     #expect(plan.text == "selected")
-    #expect(plan.replacementStrategy == .selectedText)
+    #expect(
+        plan.replacementStrategy
+            == .selectedTextWithPlainTextFallback(originalValue: fullText)
+    )
 }
 
 @Test @MainActor
@@ -209,6 +425,22 @@ func accessibilitySelectionPlanUsesReadableSelectionEvenWhenEditabilityIsUnknown
 
     #expect(plan.text == "selected")
     #expect(plan.replacementStrategy == .selectedText)
+}
+
+@Test @MainActor
+func accessibilitySelectionPlanKeepsFallbackWhenSettableReportingIsWrong() throws {
+    let fullText = "Before selected after"
+    let plan = try AccessibilitySelectionClient.selectionPlan(
+        selectedText: "selected",
+        fullText: fullText,
+        fullTextIsSettable: false,
+        range: CFRange(location: 7, length: 8)
+    )
+
+    #expect(
+        plan.replacementStrategy
+            == .selectedTextWithPlainTextFallback(originalValue: fullText)
+    )
 }
 
 @Test @MainActor
@@ -370,7 +602,8 @@ func shortcutRewriteForwardsPersonalizationSettings() async throws {
         intensity: 7,
         writingStyle: .persuasive,
         customInstructions: "Keep it understated.",
-        customInstructionsExclusive: true
+        customInstructionsExclusive: true,
+        provider: .codexLuna
     )
     try await waitUntil { coordinator.state == .replaced }
 
@@ -380,6 +613,19 @@ func shortcutRewriteForwardsPersonalizationSettings() async throws {
     #expect(request?.writingStyle == .persuasive)
     #expect(request?.customInstructions == "Keep it understated.")
     #expect(request?.customInstructionsExclusive == true)
+    #expect(request?.provider == .codexLuna)
+}
+
+@Test @MainActor
+func settingsRecoverFromAnUnknownProviderValue() throws {
+    let suiteName = "RewriteBarTests.ProviderMigration.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    defaults.set("future-provider", forKey: RewriteSettingsStore.Key.rewriteProvider)
+
+    let store = RewriteSettingsStore(defaults: defaults)
+
+    #expect(store.rewriteProvider == .codexLuna)
 }
 
 @MainActor
@@ -455,4 +701,31 @@ private final class AccessibilityPermissionState: @unchecked Sendable {
     var granted = false
     var setupRequestCount = 0
     var setupCompletionCount = 0
+}
+
+private final class NotificationCounter: @unchecked Sendable {
+    var value = 0
+}
+
+@Test @MainActor
+func menuIntensityControlsShortcutsAndRelaunchRestoresSavedDefault() throws {
+    let suite = "RewriteBarTests.Session.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let store = RewriteSettingsStore(defaults: defaults)
+    store.defaultIntensity = 4
+    #expect(store.activeIntensity == 4)
+    store.selectIntensity(8)
+    #expect(store.activeIntensity == 8)
+    #expect(store.defaultIntensity == 4)
+    let relaunched = RewriteSettingsStore(defaults: defaults)
+    #expect(relaunched.activeIntensity == 4)
+    store.resetIntensity()
+    #expect(store.activeIntensity == 4)
+    store.selectIntensity(9)
+    store.defaultIntensity = 6
+    #expect(store.activeIntensity == 6)
+    store.defaultIntensity = 99
+    #expect(store.activeIntensity == 10)
+    #expect(RewriteSettingsStore(defaults: defaults).defaultIntensity == 10)
 }

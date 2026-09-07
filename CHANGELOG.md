@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.0.0
+
+* Rebuilt around selected text and the global shortcut. The menu bar contains a single bare intensity slider.
+* The slider now controls shortcut rewrites. Settings save the default; menu adjustments last until reset or relaunch.
+* Codex is the only rewrite engine. Removed bundled model weights, MLX, model downloads, and local fallback.
+* Replaced the crowded Settings form with a compact frosted window, clear account setup, and optional writing preferences.
+* Press the shortcut again to cancel. Changing the slider returns focus to the previous app.
+* Added Open at Login and actionable connection, account, usage, and timeout feedback.
+* Preserved isolated ChatGPT sign-in, disabled model tools, structured output, source protection, and guarded selection replacement.
+* Rejects incomplete selection scans and waits for the previous app to close before installing an update.
+* Bounds Codex startup, keeps cancellation responsive during connection, and recovers from malformed responses without crashing.
+* Uses the rewrite service's actual usage-limit response, removes misleading account percentages, and avoids idle Settings polling.
+
+
+## 1.4.0 (development preview, superseded by 2.0.0)
+
+* Adds an optional Codex Luna online processing mode backed by a user's ChatGPT subscription, while keeping the bundled Qwen model as the default.
+* Makes Luna rewrites complete faster, verifies selected text was actually replaced before showing success, and distinguishes clipboard-only recovery from replacement.
+* Isolates RewriteBar's Codex sign-in and ephemeral rewrite threads from the user's other Codex projects, tools, skills, and configuration.
+* Gives Luna a short first attempt inside the existing rewrite deadline, then retries automatically with the warmed on-device model when Codex, the network, the account, the model, or the response is unavailable.
+* Prepares the isolated Luna runtime when online mode is selected, briefly reuses verified account and model readiness, and gives healthy Luna work enough time to finish without triggering a slower double-provider attempt.
+* Applies the same source-instruction protection, output cleanup, custom preferences, and meaning validation to both processing modes.
+* Adds explicit online-processing disclosure, managed Codex connection status, and a local restore default in Settings without changing the menu bar popover.
+* Keeps the Option R shortcut connected to the active editor when macOS temporarily omits the focused application from its system wide Accessibility object.
+* Shows a native animated progress indicator in the menu bar while a shortcut rewrite is running.
+* Adds a second native replacement path for editors such as WhatsApp that expose selected text but reject direct selected text updates.
+
 ## 1.3.2
 
 * Removes Settings dividers for a cleaner, quieter surface in both appearances.

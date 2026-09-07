@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import OSLog
+import QuartzCore
 import RewriteCore
 import SwiftUI
 
@@ -10,16 +11,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         subsystem: AppConstants.bundleIdentifier,
         category: "Lifecycle"
     )
-    private let viewModel = RewriteViewModel()
     private let settings = RewriteSettingsStore.shared
     private let clipboard = ClipboardService()
     private let hotKeyRegistrar = GlobalHotKeyRegistrar()
     private let shortcutCoordinator = SelectedTextRewriteCoordinator()
     private let popover = NSPopover()
     private var statusItem: NSStatusItem?
+    private var statusProgressIndicator: MenuBarProgressIndicator?
     private var previouslyActiveApplication: NSRunningApplication?
     private var restoresFocusAfterClose = false
     private var shortcutSettingsObservation: AnyCancellable?
+    private var shortcutRecordingBeginObservation: AnyCancellable?
+    private var shortcutRecordingEndObservation: AnyCancellable?
+    private var codexAccountObservation: AnyCancellable?
+    private var previousCodexAccountState: CodexAccountController.State = .idle
     private var statusFeedbackTask: Task<Void, Never>?
     private var accessibilityRecovery = AccessibilityPermissionRecoveryState()
 
@@ -28,12 +33,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         configurePopover()
         configureStatusItem()
         configureShortcutFlow()
+        CodexAccountController.shared.refresh()
+        configureCodexConnectionFeedback()
+        if !UserDefaults.standard.bool(forKey: "settings.didPresentVersion2Setup") {
+            UserDefaults.standard.set(true, forKey: "settings.didPresentVersion2Setup")
+            SettingsWindowController.shared.show()
+        }
         logger.notice("Application launched")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         hotKeyRegistrar.unregister()
         statusFeedbackTask?.cancel()
+        let shutdownFinished = DispatchSemaphore(value: 0)
+        Task.detached {
+            await CodexAppServerClient.shared.shutdown()
+            shutdownFinished.signal()
+        }
+        _ = shutdownFinished.wait(timeout: .now() + 0.5)
     }
 
     func applicationShouldHandleReopen(
@@ -45,8 +62,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     func popoverDidClose(_ notification: Notification) {
-        viewModel.popoverClosed()
-
         let applicationToRestore = restoresFocusAfterClose
             ? previouslyActiveApplication
             : nil
@@ -60,10 +75,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 options: []
             )
         }
-    }
-
-    func popoverWillShow(_ notification: Notification) {
-        viewModel.popoverOpened()
     }
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
@@ -84,14 +95,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
+    func showIntensity() {
+        guard let button = statusItem?.button else { return }
+        if !popover.isShown { togglePopover(button) }
+    }
+
     private func configurePopover() {
         popover.behavior = .transient
-        popover.animates = true
-        popover.contentSize = NSSize(width: 292, height: 156)
+        popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        popover.contentSize = NSSize(width: 252, height: 60)
         popover.delegate = self
         popover.contentViewController = NSHostingController(
             rootView: PopoverView(
-                viewModel: viewModel,
+                settings: settings,
                 close: { [weak self] in
                     self?.closeAfterCompletion()
                 },
@@ -127,11 +143,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         button.title = "∞"
         button.font = .systemFont(ofSize: 16, weight: .medium)
-        button.toolTip = "RewriteBar"
+        button.toolTip = "RewriteBar · Click for intensity · Right-click for Settings"
         button.setAccessibilityLabel("RewriteBar")
         button.target = self
         button.action = #selector(togglePopover(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+
+        let progressIndicator = MenuBarProgressIndicator()
+        progressIndicator.translatesAutoresizingMaskIntoConstraints = false
+        button.addSubview(progressIndicator)
+        NSLayoutConstraint.activate([
+            progressIndicator.centerXAnchor.constraint(equalTo: button.centerXAnchor),
+            progressIndicator.centerYAnchor.constraint(equalTo: button.centerYAnchor),
+            progressIndicator.widthAnchor.constraint(equalToConstant: 14),
+            progressIndicator.heightAnchor.constraint(equalToConstant: 14)
+        ])
+
+        statusProgressIndicator = progressIndicator
         statusItem = item
     }
 
@@ -139,7 +167,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         shortcutCoordinator.onCompletion = { [weak self] output in
             guard let self else { return }
             clipboard.writePlainText(output)
-            showShortcutSuccess(replacedSelection: true)
+            logger.notice("Shortcut selection replaced and copied")
+            showShortcutSuccess()
         }
         shortcutCoordinator.onCopyOnlyCompletion = { [weak self] output, failure in
             guard let self else { return }
@@ -147,7 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             logger.notice(
                 "Shortcut result copied after replacement was unavailable: \(failure.localizedDescription, privacy: .public)"
             )
-            showShortcutSuccess(replacedSelection: false)
+            showShortcutCopyOnly(failure: failure)
         }
         shortcutCoordinator.onFailure = { [weak self] failure in
             self?.showShortcutFailure(failure)
@@ -157,6 +186,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .removeDuplicates()
             .sink { [weak self] shortcut in
                 self?.registerGlobalShortcut(shortcut)
+            }
+
+        shortcutRecordingBeginObservation = NotificationCenter.default
+            .publisher(for: .rewriteBarShortcutRecordingDidBegin)
+            .sink { [weak self] _ in
+                self?.hotKeyRegistrar.unregister()
+            }
+        shortcutRecordingEndObservation = NotificationCenter.default
+            .publisher(for: .rewriteBarShortcutRecordingDidEnd)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                registerGlobalShortcut(settings.keyboardShortcut)
+            }
+    }
+
+    private func configureCodexConnectionFeedback() {
+        codexAccountObservation = CodexAccountController.shared.$state
+            .removeDuplicates()
+            .sink { [weak self] state in
+                guard let self else { return }
+                let previousState = previousCodexAccountState
+                previousCodexAccountState = state
+                guard CodexConnectionFeedbackPolicy.showsConfirmation(
+                    previous: previousState,
+                    current: state
+                ), !shortcutCoordinator.isRewriting else {
+                    return
+                }
+                NSHapticFeedbackManager.defaultPerformer.perform(
+                    .alignment,
+                    performanceTime: .now
+                )
+                showTemporaryStatus(
+                    title: "✓",
+                    toolTip: "Codex connected",
+                    duration: .seconds(2),
+                    resetsShortcutState: false
+                )
             }
     }
 
@@ -181,38 +248,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func startSelectedTextRewrite() {
         guard !shortcutCoordinator.isRewriting else {
-            showShortcutFailure(.rewriteAlreadyRunning)
+            shortcutCoordinator.cancel()
+            showTemporaryStatus(title: "∞", toolTip: "Rewrite cancelled", duration: .seconds(1))
             return
         }
 
+        if popover.isShown {
+            closeAfterCompletion()
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(100))
+                self?.startSelectedTextRewrite()
+            }
+            return
+        }
         statusFeedbackTask?.cancel()
         statusFeedbackTask = nil
-        showStatusItem(
-            title: "◌",
-            toolTip: "Rewriting selected text"
-        )
+        showStatusProgress(toolTip: "Rewriting selected text")
         shortcutCoordinator.startRewrite(
-            intensity: settings.defaultIntensity,
+            intensity: settings.activeIntensity,
             writingStyle: settings.writingStyle,
             customInstructions: settings.customInstructionsEnabled
                 ? settings.customInstructions
                 : nil,
             customInstructionsExclusive: settings.customInstructionsExclusive,
+            provider: settings.rewriteProvider,
             promptingForPermission: false
         )
     }
 
-    private func showShortcutSuccess(replacedSelection: Bool) {
+    private func showShortcutSuccess() {
         NSHapticFeedbackManager.defaultPerformer.perform(
             .alignment,
             performanceTime: .now
         )
         showTemporaryStatus(
             title: "✓",
-            toolTip: replacedSelection
-                ? "Selection rewritten and copied"
-                : "Rewrite copied to the clipboard",
+            toolTip: "Selection rewritten and copied",
             duration: .milliseconds(1_500)
+        )
+    }
+
+    private func showShortcutCopyOnly(failure: AccessibilityRewriteFailure) {
+        showTemporaryStatus(
+            title: ShortcutCopyOnlyFeedbackPolicy.title,
+            toolTip: ShortcutCopyOnlyFeedbackPolicy.toolTip(for: failure),
+            duration: .seconds(3),
+            length: NSStatusItem.variableLength,
+            fontSize: ShortcutCopyOnlyFeedbackPolicy.fontSize
         )
     }
 
@@ -221,11 +303,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             "Shortcut rewrite unavailable: \(failure.localizedDescription, privacy: .public)"
         )
         showTemporaryStatus(
-            title: "!",
+            title: ShortcutFailureFeedbackPolicy.title(for: failure),
             toolTip: failure.localizedDescription,
-            duration: .seconds(2)
+            duration: .seconds(3),
+            length: NSStatusItem.variableLength,
+            fontSize: ShortcutFailureFeedbackPolicy.fontSize
         )
 
+        if failure == .rewriteFailed(.accountRequired) || failure == .rewriteFailed(.runtimeRequired) {
+            SettingsWindowController.shared.show()
+        }
         if failure == .permissionRequired {
             if accessibilityRecovery.shouldBeginSetup(for: failure) {
                 AccessibilityPermission.beginSetup()
@@ -239,24 +326,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private func showTemporaryStatus(
         title: String,
         toolTip: String,
-        duration: Duration
+        duration: Duration,
+        length: CGFloat = NSStatusItem.squareLength,
+        fontSize: CGFloat = 16,
+        resetsShortcutState: Bool = true
     ) {
         statusFeedbackTask?.cancel()
-        showStatusItem(title: title, toolTip: toolTip)
+        showStatusItem(
+            title: title,
+            toolTip: toolTip,
+            length: length,
+            fontSize: fontSize
+        )
         statusFeedbackTask = Task { [weak self] in
             try? await Task.sleep(for: duration)
             guard !Task.isCancelled, let self else { return }
             showStatusItem(title: "∞", toolTip: "RewriteBar")
-            shortcutCoordinator.resetState()
+            if resetsShortcutState {
+                shortcutCoordinator.resetState()
+            }
             statusFeedbackTask = nil
         }
     }
 
-    private func showStatusItem(title: String, toolTip: String) {
-        guard let button = statusItem?.button else { return }
+    private func showStatusItem(
+        title: String,
+        toolTip: String,
+        length: CGFloat = NSStatusItem.squareLength,
+        fontSize: CGFloat = 16
+    ) {
+        guard let statusItem, let button = statusItem.button else { return }
+        statusItem.length = length
+        statusProgressIndicator?.stopAnimation(nil)
+        button.font = .systemFont(ofSize: fontSize, weight: .medium)
         button.title = title
         button.toolTip = toolTip
         button.setAccessibilityLabel(toolTip)
+    }
+
+    private func showStatusProgress(toolTip: String) {
+        guard let statusItem, let button = statusItem.button else { return }
+        statusItem.length = NSStatusItem.squareLength
+        button.title = ""
+        button.toolTip = toolTip
+        button.setAccessibilityLabel(toolTip)
+        statusProgressIndicator?.startAnimation(nil)
     }
 
     private func showStatusMenu(from button: NSStatusBarButton) {
@@ -270,6 +384,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         )
         settingsItem.target = self
         menu.addItem(settingsItem)
+        let defaultItem = NSMenuItem(
+            title: "Use default (\(settings.defaultIntensity))",
+            action: #selector(resetIntensity),
+            keyEquivalent: ""
+        )
+        defaultItem.target = self
+        defaultItem.state = settings.sessionIntensity.isOverridden ? .off : .on
+        menu.addItem(defaultItem)
+        menu.addItem(.separator())
 
         let aboutItem = NSMenuItem(
             title: "About RewriteBar",
@@ -291,6 +414,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         NSMenu.popUpContextMenu(menu, with: event, for: button)
     }
 
+    @objc private func resetIntensity() { settings.resetIntensity() }
+
     @objc private func openSettings() {
         if popover.isShown {
             popover.performClose(nil)
@@ -308,19 +433,144 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 }
 
+final class MenuBarProgressIndicator: NSView {
+    private let arcLayer = CAShapeLayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        isHidden = true
+
+        arcLayer.fillColor = NSColor.clear.cgColor
+        arcLayer.strokeColor = NSColor.labelColor.cgColor
+        arcLayer.lineWidth = 1.8
+        arcLayer.lineCap = .round
+        arcLayer.strokeStart = 0.08
+        arcLayer.strokeEnd = 0.78
+        layer?.addSublayer(arcLayer)
+    }
+
+    convenience init() {
+        self.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            arcLayer.strokeColor = NSColor.labelColor.cgColor
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        arcLayer.frame = bounds
+        arcLayer.path = CGPath(
+            ellipseIn: bounds.insetBy(dx: 1.4, dy: 1.4),
+            transform: nil
+        )
+    }
+
+    func startAnimation(_ sender: Any?) {
+        isHidden = false
+        arcLayer.removeAnimation(forKey: "rotation")
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            return
+        }
+
+        let rotation = CABasicAnimation(keyPath: "transform.rotation.z")
+        rotation.fromValue = 0
+        rotation.toValue = Double.pi * 2
+        rotation.duration = 0.75
+        rotation.repeatCount = .infinity
+        rotation.timingFunction = CAMediaTimingFunction(name: .linear)
+        arcLayer.add(rotation, forKey: "rotation")
+    }
+
+    func stopAnimation(_ sender: Any?) {
+        arcLayer.removeAnimation(forKey: "rotation")
+        isHidden = true
+    }
+}
+
+enum CodexConnectionFeedbackPolicy {
+    static func showsConfirmation(
+        previous: CodexAccountController.State,
+        current: CodexAccountController.State
+    ) -> Bool {
+        guard case .connecting = previous,
+              case .connected(_, true) = current else {
+            return false
+        }
+        return true
+    }
+}
+
+enum ShortcutFailureFeedbackPolicy {
+    static let fontSize: CGFloat = 11
+
+    static func title(for failure: AccessibilityRewriteFailure) -> String {
+        switch failure {
+        case .permissionRequired:
+            return "Set Up"
+        case .noFocusedApplication, .noFocusedElement, .selectionEmpty:
+            return "Select text"
+        case .secureField:
+            return "Secure field"
+        case .selectionUnavailable, .selectionNotEditable:
+            return "Not editable"
+        case .multipleSelectionsUnsupported:
+            return "One selection"
+        case .focusChanged, .selectionChanged:
+            return "Selection changed"
+        case .rewriteAlreadyRunning:
+            return "Working"
+        case .invalidShortcut, .shortcutConflict, .shortcutRegistrationFailed:
+            return "Shortcut error"
+        case .accessibilityFailure:
+            return "Accessibility error"
+        case .rewriteFailed(let error):
+            switch error {
+            case .accountRequired: return "Connect Codex"
+            case .runtimeRequired: return "Install Codex"
+            case .usageLimitReached: return "Usage limit"
+            case .connectionFailed: return "Check connection"
+            case .timedOut: return "Try again"
+            case .textTooLong: return "Text too long"
+            default: return "Rewrite failed"
+            }
+        }
+    }
+}
+
+enum ShortcutCopyOnlyFeedbackPolicy {
+    static let title = "Copied"
+    static let fontSize: CGFloat = 11
+
+    static func toolTip(for failure: AccessibilityRewriteFailure) -> String {
+        "The selection was not replaced. The rewrite is on the clipboard. \(failure.localizedDescription)"
+    }
+}
+
 @main
 struct RewriteBarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
-    init() {
-        Task.detached(priority: .userInitiated) {
-            await LocalModelService.shared.warmUp()
-        }
-    }
-
     var body: some Scene {
         Settings {
             EmptyView()
+        }
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") { SettingsWindowController.shared.show() }
+                    .keyboardShortcut(",", modifiers: .command)
+                Button("Show Intensity") { appDelegate.showIntensity() }
+                    .keyboardShortcut("i", modifiers: .command)
+            }
         }
     }
 }

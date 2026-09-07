@@ -7,8 +7,8 @@ project_dir=${script_dir:h}
 info_plist="$project_dir/Configuration/Info.plist"
 mode=${1:-publish}
 
-if [[ "$mode" != "publish" && "$mode" != "--check" ]]; then
-    print -u2 "Usage: ./Scripts/publish-release.sh [--check]"
+if [[ "$mode" != "publish" && "$mode" != "--check" && "$mode" != "--wait" ]]; then
+    print -u2 "Usage: ./Scripts/publish-release.sh [--check | --wait]"
     exit 1
 fi
 
@@ -56,6 +56,13 @@ fi
 
 git tag -a "$tag" -m "RewriteBar $version"
 git push origin "$tag"
+
+if [[ "$mode" != "--wait" ]]; then
+    gh run list --workflow release.yml --branch "$tag" --limit 1
+    print "Release $tag was requested. GitHub is building and publishing it."
+    print "https://github.com/Nexus-Global-Partners/RewriteBar/actions/workflows/release.yml"
+    exit 0
+fi
 
 run_id=""
 for _ in {1..30}; do

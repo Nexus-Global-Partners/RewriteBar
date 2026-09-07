@@ -28,8 +28,6 @@ jobs:
           test "$GITHUB_REF_NAME" = "v$version"
       - name: Run checks
         run: ./Scripts/check-project.sh
-      - name: Download verified model
-        run: ./Scripts/download-model.sh
       - name: Package app
         run: |
           ./Scripts/package-release.sh

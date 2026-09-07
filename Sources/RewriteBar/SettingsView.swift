@@ -1,6 +1,7 @@
 import AppKit
 import RewriteCore
 import SwiftUI
+import ServiceManagement
 
 @MainActor
 final class AccessibilitySetupModel: ObservableObject {
@@ -50,423 +51,217 @@ final class AccessibilitySetupModel: ObservableObject {
 struct SettingsView: View {
     @ObservedObject var store: RewriteSettingsStore
     @ObservedObject var presentation: SettingsPresentationModel
-
     @State private var instructionsDraft: String
+    @State private var showsPreferences = false
+    @State private var startsAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var loginError: String?
     @StateObject private var accessibility: AccessibilitySetupModel
+    @StateObject private var codexAccount: CodexAccountController
     @Environment(\.colorScheme) private var colorScheme
 
     init(
         store: RewriteSettingsStore = .shared,
         presentation: SettingsPresentationModel = SettingsPresentationModel(),
-        accessibility: AccessibilitySetupModel = AccessibilitySetupModel()
+        accessibility: AccessibilitySetupModel = AccessibilitySetupModel(),
+        codexAccount: CodexAccountController = .shared
     ) {
         self.store = store
         self.presentation = presentation
         _instructionsDraft = State(initialValue: store.customInstructions)
         _accessibility = StateObject(wrappedValue: accessibility)
+        _codexAccount = StateObject(wrappedValue: codexAccount)
     }
 
     var body: some View {
-        Form {
-            Section {
-                LabeledContent("Shortcut intensity") {
-                    HStack(spacing: 10) {
-                        Slider(
-                            value: intensityBinding,
-                            in: 0...10,
-                            step: 1
-                        )
-                        .frame(width: 190)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 12) {
+                Text("∞").font(.system(size: 38, weight: .light))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("RewriteBar")
+                        .font(.system(size: 21, weight: .semibold, design: .rounded))
+                    Text("Your words. A little clearer.")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 28).padding(.top, 18).padding(.bottom, 22)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        sectionTitle("INTENSITY")
+                        HStack {
+                            Text("Default level").fontWeight(.medium)
+                            Spacer()
+                            Text("\(store.defaultIntensity) / 10")
+                                .monospacedDigit().foregroundStyle(.secondary)
+                        }
+                        GlassyIntensitySlider(value: Binding(
+                            get: { Double(store.defaultIntensity) },
+                            set: { store.defaultIntensity = Int($0.rounded()) }
+                        ))
                         .accessibilityLabel("Default rewrite intensity")
-                        .accessibilityValue("\(store.defaultIntensity) out of 10")
-
-                        Text("\(store.defaultIntensity)")
-                            .font(.system(.body, design: .rounded, weight: .semibold))
-                            .monospacedDigit()
-                            .frame(width: 28, height: 24)
-                            .background(.thinMaterial, in: Circle())
-                            .accessibilityHidden(true)
+                        HStack {
+                            Text("Proofread")
+                            Spacer()
+                            Text("Rephrase")
+                        }
+                        .font(.system(size: 10)).foregroundStyle(.tertiary)
+                        .padding(.top, -10)
+                        Text(RewriteIntensityPolicy.definition(for: store.defaultIntensity))
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("The menu bar changes the level until you quit or choose Use default.")
+                            .font(.system(size: 10)).foregroundStyle(.tertiary)
                     }
-                }
-
-                Text(
-                    RewriteIntensityPolicy.definition(
-                        for: store.defaultIntensity
-                    )
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel("Shortcut intensity description")
-
-                Picker("Writing style", selection: $store.writingStyle) {
-                    ForEach(RewriteStyle.allCases) { style in
-                        Text(style.displayName).tag(style)
+                    Divider().opacity(0.6)
+                    VStack(alignment: .leading, spacing: 12) {
+                        sectionTitle("SHORTCUT")
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Rewrite selected text").fontWeight(.medium)
+                                Text("Select. Press. Keep writing.")
+                                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            ShortcutRecorderView(shortcut: $store.keyboardShortcut)
+                                .frame(width: 112, height: 28)
+                        }
+                        if let error = store.shortcutRegistrationError {
+                            Text(error).font(.caption).foregroundStyle(.secondary)
+                        }
+                        if !accessibility.isGranted {
+                            HStack {
+                                Text("Allow RewriteBar to replace your selection.")
+                                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                                Spacer()
+                                Button("Allow Access") { accessibility.beginSetup() }
+                                    .help("Open macOS Accessibility settings")
+                            }
+                            .id(presentation.accessibilitySetupEmphasis)
+                        } else {
+                            Label("Ready in compatible text fields", systemImage: "checkmark")
+                                .font(.system(size: 11)).foregroundStyle(.secondary)
+                        }
                     }
+                    Divider().opacity(0.6)
+                    VStack(alignment: .leading, spacing: 12) {
+                        sectionTitle("ACCOUNT")
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Codex").fontWeight(.medium)
+                                Text(codexAccount.statusText)
+                                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if codexAccount.canConnect {
+                                Button("Connect") { codexAccount.connect() }
+                            } else if codexAccount.isConnected {
+                                Menu {
+                                    Button("Refresh connection") { codexAccount.refresh() }
+                                    Button("Disconnect") { codexAccount.disconnect() }
+                                } label: {
+                                    Image(systemName: "checkmark.circle")
+                                }
+                                .menuStyle(.borderlessButton).frame(width: 28)
+                                .accessibilityLabel("Codex account options")
+                            } else {
+                                Button("Check again") { codexAccount.refresh() }
+                                    .disabled(codexAccount.state == .checking || codexAccount.state == .connecting)
+                            }
+                        }
+                        Text("Rewrites use your ChatGPT subscription. Selected text and enabled writing preferences are sent to OpenAI only when you press the shortcut. Internet required.")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Divider().opacity(0.6)
+                    DisclosureGroup("Writing preferences", isExpanded: $showsPreferences) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Picker("Style", selection: $store.writingStyle) {
+                                ForEach(RewriteStyle.allCases) { Text($0.displayName).tag($0) }
+                            }
+                            Text(store.writingStyle.explanation)
+                                .font(.caption).foregroundStyle(.secondary)
+                            Toggle("Custom instructions", isOn: $store.customInstructionsEnabled)
+                            if store.customInstructionsEnabled {
+                                TextEditor(text: $instructionsDraft)
+                                    .font(.system(size: 12))
+                                    .frame(height: 82)
+                                    .padding(6)
+                                    .scrollContentBackground(.hidden)
+                                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
+                                    .overlay(alignment: .topLeading) {
+                                        if instructionsDraft.isEmpty {
+                                            Text("Keep my sentences short and direct.")
+                                                .font(.system(size: 12)).foregroundStyle(.tertiary)
+                                                .padding(11).allowsHitTesting(false)
+                                        }
+                                    }
+                                    .accessibilityLabel("Custom rewrite instructions")
+                                    .onChange(of: instructionsDraft) { _, value in
+                                        let bounded = String(value.prefix(RewriteSettingsStore.maximumInstructionLength))
+                                        if bounded != value { instructionsDraft = bounded }
+                                        store.saveCustomInstructions(bounded)
+                                    }
+                                Toggle("Use these instead of the selected style", isOn: $store.customInstructionsExclusive)
+                                    .font(.system(size: 11))
+                                Text("Your meaning, facts, language, and selected intensity always come first.")
+                                    .font(.system(size: 10)).foregroundStyle(.tertiary)
+                            }
+                        }.padding(.top, 12)
+                    }
+                    .font(.system(size: 12, weight: .medium))
+                    Toggle("Open at login", isOn: $startsAtLogin)
+                        .onChange(of: startsAtLogin) { _, enabled in
+                            do {
+                                if enabled { try SMAppService.mainApp.register() }
+                                else { try SMAppService.mainApp.unregister() }
+                                loginError = nil
+                            } catch {
+                                loginError = "Could not change login settings. Try again."
+                                startsAtLogin = SMAppService.mainApp.status == .enabled
+                            }
+                        }
+                    if let loginError { Text(loginError).font(.caption) }
                 }
-                .accessibilityLabel("Default writing style")
-
-                Text(store.writingStyle.explanation)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityLabel("Style description")
-                    .accessibilityValue(store.writingStyle.explanation)
-            } header: {
-                Text("Rewrite")
-            } footer: {
-                Text("The slider in the menu bar still lets you change intensity for each rewrite.")
-                    .foregroundStyle(.secondary)
+                .padding(.horizontal, 28).padding(.bottom, 20)
             }
-
-            Section {
-                LabeledContent("Rewrite selection") {
-                    HStack(spacing: 8) {
-                        ShortcutRecorderView(shortcut: $store.keyboardShortcut)
-                            .frame(width: 142, height: 26)
-
-                        if accessibility.isGranted {
-                            AccessibilityEnabledPin()
-                        }
-                    }
-                }
-
-                if let error = store.shortcutRegistrationError {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("Shortcut error: \(error)")
-                }
-
-                if !accessibility.isGranted {
-                    HStack(spacing: 8) {
-                        Image(systemName: "circle.dotted")
-                            .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Setup needed")
-                                .foregroundStyle(.secondary)
-
-                            Text("Allow this copy of RewriteBar in macOS Accessibility.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
-
-                        SetupGlassButton(
-                            emphasisToken: presentation.accessibilitySetupEmphasis
-                        ) {
-                            accessibility.beginSetup()
-                        }
-                        .accessibilityHint("Opens macOS Accessibility settings")
-                    }
-                }
-            } header: {
-                Text("Keyboard")
-            } footer: {
-                Text(
-                    accessibility.isGranted
-                        ? "Select editable text, then press the shortcut. The result replaces the selection and is copied."
-                        : "Set Up refreshes any older RewriteBar permission, then macOS asks you to allow this copy."
-                )
-                .foregroundStyle(.secondary)
-            }
-
-            Section {
-                Toggle("Use custom instructions", isOn: $store.customInstructionsEnabled)
-                    .accessibilityHint("Applies your preferences to every rewrite")
-
-                LabeledContent("Exclusive") {
-                    HStack(spacing: 8) {
-                        Text(store.customInstructionsExclusive ? "Yes" : "No")
-                            .foregroundStyle(.secondary)
-
-                        Toggle(
-                            "Use only custom instructions for writing style",
-                            isOn: $store.customInstructionsExclusive
-                        )
-                        .labelsHidden()
-                    }
-                }
-                .disabled(!store.customInstructionsEnabled)
-                .opacity(store.customInstructionsEnabled ? 1 : 0.48)
-                .accessibilityHint(
-                    store.customInstructionsExclusive
-                        ? "The selected writing style is ignored"
-                        : "Custom instructions are added to the selected writing style"
-                )
-
-                TextEditor(text: $instructionsDraft)
-                    .font(.body)
-                    .frame(minHeight: 78, maxHeight: 108)
-                    .padding(5)
-                    .scrollContentBackground(.hidden)
-                    .background {
-                        ZStack {
-                            Rectangle()
-                                .fill(.thinMaterial)
-
-                            Rectangle()
-                                .fill(
-                                    colorScheme == .dark
-                                        ? Color.black.opacity(0.26)
-                                        : Color(nsColor: .textBackgroundColor).opacity(0.72)
-                                )
-                        }
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    .overlay(alignment: .topLeading) {
-                        if instructionsDraft.isEmpty {
-                            Text("For example: Keep my sentences short and direct.")
-                                .font(.body)
-                                .foregroundStyle(.tertiary)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .allowsHitTesting(false)
-                                .accessibilityHidden(true)
-                        }
-                    }
-                    .disabled(!store.customInstructionsEnabled)
-                    .opacity(store.customInstructionsEnabled ? 1 : 0.48)
-                    .accessibilityLabel("Custom rewrite instructions")
-                    .onChange(of: instructionsDraft) { _, newValue in
-                        let bounded = String(
-                            newValue.prefix(RewriteSettingsStore.maximumInstructionLength)
-                        )
-                        if bounded != newValue {
-                            instructionsDraft = bounded
-                            return
-                        }
-                        store.saveCustomInstructions(bounded)
-                    }
-
-                HStack {
-                    Text("\(instructionsDraft.count) of \(RewriteSettingsStore.maximumInstructionLength)")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .monospacedDigit()
-                        .accessibilityLabel("\(instructionsDraft.count) of \(RewriteSettingsStore.maximumInstructionLength) characters")
-
-                    Spacer()
-
-                    Button("Reset") {
-                        store.resetCustomInstructions()
-                        instructionsDraft = ""
-                    }
-                    .disabled(instructionsDraft.isEmpty && store.customInstructions.isEmpty)
-
-                    Text("Saved automatically")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .accessibilityLabel("Custom instructions save automatically")
-                }
-            } header: {
-                Text("Custom instructions")
-            } footer: {
-                Text(
-                    store.customInstructionsExclusive
-                        ? "Exclusive uses only your custom instructions for style. Meaning, facts, language, intensity, and safety rules still apply."
-                        : "Custom instructions add to the selected writing style. Meaning, facts, language, intensity, and safety rules still apply."
-                )
-                .foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
-        .listRowSeparator(.hidden)
-        .foregroundStyle(AppPalette.settingsPrimaryText(for: colorScheme))
-        .tint(
-            colorScheme == .dark
-                ? Color.white.opacity(0.58)
-                : AppPalette.graphite
-        )
-        .scrollContentBackground(.hidden)
-        .background {
-            AppGlassBackground(neutralSurfaceOpacity: 0.90)
-        }
-        .safeAreaInset(edge: .bottom) {
             HStack {
-                Button("Restore Defaults") {
+                Button("Restore defaults") {
                     store.resetAll()
                     instructionsDraft = store.customInstructions
-                    accessibility.refresh()
-                }
-                .accessibilityHint("Restores all RewriteBar settings to their defaults")
-
+                }.buttonStyle(.plain).foregroundStyle(.secondary)
                 Spacer()
-
-                Text("Settings save on this Mac")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                Text("Saved automatically").foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background {
-                ZStack {
-                    Rectangle()
-                        .fill(.thinMaterial)
-
-                    Rectangle()
-                        .fill(
-                            colorScheme == .dark
-                                ? Color.black.opacity(0.38)
-                                : AppPalette.frost.opacity(0.16)
-                        )
-                }
-            }
+            .font(.system(size: 10)).padding(.horizontal, 28).padding(.vertical, 14)
         }
-        .frame(width: 520, height: 590)
-        .onReceive(
-            NotificationCenter.default.publisher(
-                for: NSApplication.didBecomeActiveNotification
-            )
-        ) { _ in
+        .font(.system(size: 12))
+        .controlSize(.small)
+        .tint(colorScheme == .dark ? Color.white.opacity(0.65) : AppPalette.graphite)
+        .background { AppGlassBackground(neutralSurfaceOpacity: 0.90) }
+        .frame(width: 460, height: 620)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             accessibility.refresh()
         }
         .task {
-            while !Task.isCancelled {
-                accessibility.refresh()
-                try? await Task.sleep(for: .milliseconds(500))
-            }
+            codexAccount.refresh()
+            accessibility.refresh()
         }
     }
 
-    private var intensityBinding: Binding<Double> {
-        Binding(
-            get: { Double(store.defaultIntensity) },
-            set: { store.defaultIntensity = Int($0.rounded()) }
-        )
-    }
-
-}
-
-private struct AccessibilityEnabledPin: View {
-    var body: some View {
-        Label("Enabled", systemImage: "checkmark")
-            .font(.system(size: 11, weight: .medium, design: .rounded))
-            .foregroundStyle(AppPalette.settingsEnabledText)
-            .padding(.horizontal, 9)
-            .frame(height: 24)
-            .background {
-                ZStack {
-                    Capsule()
-                        .fill(.thinMaterial)
-
-                    Capsule()
-                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.30))
-
-                    Capsule()
-                        .strokeBorder(
-                            Color(nsColor: .labelColor).opacity(0.16),
-                            lineWidth: 0.7
-                        )
-                }
-            }
-            .accessibilityLabel("Keyboard shortcut enabled")
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title).font(.system(size: 9, weight: .semibold)).tracking(1.4)
+            .foregroundStyle(.tertiary)
     }
 }
 
-private struct SetupGlassButton: View {
-    let emphasisToken: Int
-    let action: () -> Void
+struct SetupAttentionState {
+    private(set) var handledToken = 0
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorScheme) private var colorScheme
-    @State private var emphasisStrength = 0.0
-    @State private var emphasisTask: Task<Void, Never>?
-
-    var body: some View {
-        Button(action: action) {
-            Text("Set Up")
-                .font(.system(.body, design: .rounded, weight: .medium))
-                .foregroundStyle(AppPalette.settingsControlText(for: colorScheme))
-                .padding(.horizontal, 13)
-                .frame(height: 28)
-                .background {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(.thinMaterial)
-
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(
-                                colorScheme == .dark
-                                    ? Color.black.opacity(0.18 - (0.06 * emphasisStrength))
-                                    : Color.white.opacity(0.62 + (0.22 * emphasisStrength))
-                            )
-
-                        if colorScheme == .dark {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            .white.opacity(0.085 + (0.04 * emphasisStrength)),
-                                            .white.opacity(0.012)
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
-                        }
-
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(
-                                .white.opacity(
-                                    colorScheme == .dark
-                                        ? 0.14 + (0.08 * emphasisStrength)
-                                        : 0.88 + (0.12 * emphasisStrength)
-                                ),
-                                lineWidth: 0.8
-                            )
-
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(
-                                AppPalette.graphite.opacity(0.10),
-                                lineWidth: 0.7
-                            )
-                    }
-                    .shadow(
-                        color: colorScheme == .dark
-                            ? Color.black.opacity(0.30 + (0.08 * emphasisStrength))
-                            : AppPalette.graphite.opacity(0.12 + (0.08 * emphasisStrength)),
-                        radius: 4 + (3 * emphasisStrength),
-                        y: 2
-                    )
-                }
-                .scaleEffect(1 + (0.045 * emphasisStrength))
-                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .onChange(of: emphasisToken) { _, _ in
-            emphasize()
-        }
-        .onDisappear {
-            emphasisTask?.cancel()
-        }
-    }
-
-    private func emphasize() {
-        emphasisTask?.cancel()
-
-        if reduceMotion {
-            emphasisStrength = 1
-            emphasisTask = Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(450))
-                guard !Task.isCancelled else { return }
-                emphasisStrength = 0
-            }
-            return
-        }
-
-        withAnimation(.easeOut(duration: 0.12)) {
-            emphasisStrength = 1
-        }
-        emphasisTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(180))
-            guard !Task.isCancelled else { return }
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.72)) {
-                emphasisStrength = 0
-            }
-        }
+    mutating func shouldEmphasize(for token: Int) -> Bool {
+        guard token > handledToken else { return false }
+        handledToken = token
+        return true
     }
 }

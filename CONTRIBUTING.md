@@ -1,79 +1,38 @@
 # Contributing to RewriteBar
 
-Thanks for helping improve RewriteBar.
+Read [AGENTS.md](AGENTS.md) for the product contract and architecture. Open an issue before adding a new control, workflow, provider, dependency, or permission. Focused fixes can go straight to a pull request.
 
-You can work directly or with a coding agent. In either case, [AGENTS.md](AGENTS.md) is the single source of product and architecture context. Give an agent the repository URL, tell it to read that file completely, and require `./Scripts/check-project.sh` before accepting a change.
+## Develop
 
-## Before you start
-
-Read [AGENTS.md](AGENTS.md), then search existing Issues and Discussions. Open an issue before a new control, workflow, writing style, model, dependency, permission, or architecture change so product direction is agreed before implementation.
-
-Small bug fixes, accessibility improvements, tests, and documentation corrections can go directly to a focused pull request.
-
-## Start a branch
-
-1. Fork the repository.
-2. Create a branch from the latest `main`.
-3. Make the smallest coherent change that solves the reported problem.
-
-The fast development path does not need model weights:
+Requires Apple Silicon, macOS 14+, and Swift 6.1+. No model weights or third-party Swift dependencies.
 
 ```sh
-git clone https://github.com/YOUR_ACCOUNT/RewriteBar.git
+git clone https://github.com/Nexus-Global-Partners/RewriteBar.git
 cd RewriteBar
 ./Scripts/check-project.sh
-```
-
-Add or update a check in `Sources/RewriteCoreChecks` when behavior can be tested without the model.
-Add focused unit or integration coverage in `Tests/RewriteBarTests` for concurrency, settings, shortcut, or cross component behavior.
-
-For a complete local app update, an agent can use this sequence after making and checking the change:
-
-```sh
-./Scripts/download-model.sh
 ./Scripts/install.sh
 ```
 
-The first command is only needed when the pinned model is not already available. The second builds, signs, and installs the local app. Open the installed app once from Finder.
+The installer builds, signs, installs to `~/Applications`, and opens the app. Use a current official Codex app and connect a ChatGPT account in RewriteBar Settings for live rewrites.
 
-## Test the complete app
+## Verify
 
-Interface and model runtime changes also require the pinned local model:
+Add focused tests for behavior changes and a model-free check in `RewriteCoreChecks` when applicable. `check-project.sh` builds the app, runs the test suite, and runs the core checks.
+
+For interface changes, inspect both appearances and keyboard control. For shortcut changes, test successful replacement, changed focus and selection, unsupported editors, secure fields, and permission denial in several applications. Opening or adjusting the menu slider must never read text or generate a rewrite.
+
+For Codex changes, preserve isolated sign-in and all process restrictions. Fixture tests exercise malformed output, unexpected tools, cancellation, usage limits, and missing account/model behavior. After connecting the app, include the opt-in live check:
 
 ```sh
-./Scripts/download-model.sh
-./Scripts/build-app.sh
-codesign --verify --deep --strict dist/RewriteBar.app
+REWRITEBAR_RUN_LIVE_CODEX_TEST=1 ./Scripts/test.sh
 ```
 
-Open the built app and test the complete menu bar flow with invented text. Check levels 0, 3, 5, and 10 when prompt or generation behavior changes. Never paste private clipboard content into an issue, test, log, screenshot, or pull request.
+For the broader eight-case English/French quality and latency check at levels 0, 3, 5, and 10, run `REWRITEBAR_RUN_LIVE_QUALITY_TEST=1 ./Scripts/test.sh`.
 
-Prompt, policy, or model runtime changes should also run the opt in benchmark against the pinned model. The benchmark supports focused case and intensity arguments plus environment controls for writing styles, repetitions, custom instructions, source protection, temperature, cache behavior, and quantized key value storage. Do not commit its generated reports.
+Use invented text only. Never reuse the developer's Codex home. Report measured latency rather than promising instant results. See [SECURITY.md](SECURITY.md).
 
-Shortcut and Accessibility changes also require manual checks in several host applications:
+## Pull requests
 
-1. Confirm the shortcut registers and updates after recording a new combination.
-2. Confirm permission is requested only when needed.
-3. Rewrite a selection in a native text field and verify the result is also copied.
-4. Move focus or change the selection during generation and verify the original text is not replaced.
-5. Verify secure fields and unsupported editors fail without reading, replacing, or pasting text.
-6. Confirm the menu bar path still works without Accessibility permission.
+Describe the user effect, the reason for the change, test evidence, and remaining limitations. Include a screenshot for visible changes. Preserve the one-slider interface and put lasting preferences in Settings. Do not commit app bundles, archives, private content, credentials, or generated local reports. Public product images belong in `BrandAssets`.
 
-## Open the pull request
-
-The pull request should state:
-
-* what changes for the user
-* why the change fits a local, fast, minimal menu bar tool
-* the exact checks and manual flow you ran
-* a screenshot for visible interface changes
-
-CI runs `./Scripts/check-project.sh` on every pull request. A maintainer will review product fit, privacy, failure behavior, accessibility, and whether the change adds permanent interface or maintenance cost.
-
-Keep commits focused and do not include generated files. Maintainers handle versioning and releases after merge using [RELEASING.md](RELEASING.md).
-
-Never commit model weights, app bundles, release archives, benchmark output, clipboard content, or credentials.
-
-## Product principles
-
-RewriteBar should remain local, private, fast, focused, accessible, and visually restrained. New controls must justify their permanent cost in a tiny menu bar interface. Preserve the single slider and single action flow. Put durable personalization in the native Settings window, not in the popover, unless an issue explicitly changes that product direction.
+Maintainers release after review and merge using [RELEASING.md](RELEASING.md).

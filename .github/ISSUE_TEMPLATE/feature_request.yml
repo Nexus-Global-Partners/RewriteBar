@@ -26,7 +26,7 @@ body:
     attributes:
       label: Product fit
       options:
-        - label: This keeps clipboard processing local and private.
+        - label: This keeps clipboard processing private by default and clearly discloses any online path.
           required: true
         - label: This preserves or simplifies the focused menu bar flow.
           required: true

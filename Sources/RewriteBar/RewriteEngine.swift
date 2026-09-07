@@ -1,19 +1,34 @@
 import Foundation
 import RewriteCore
 
+enum RewriteProvider: String, CaseIterable, Codable, Identifiable, Sendable {
+    case codexLuna
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .codexLuna:
+            "Codex"
+        }
+    }
+}
+
 struct RewriteRequest: Equatable, Sendable {
     let text: String
     let intensity: Int
     let writingStyle: RewriteStyle
     let customInstructions: String?
     let customInstructionsExclusive: Bool
+    let provider: RewriteProvider
 
     init(
         text: String,
         intensity: Int,
         writingStyle: RewriteStyle = .rewriteBar,
         customInstructions: String? = nil,
-        customInstructionsExclusive: Bool = false
+        customInstructionsExclusive: Bool = false,
+        provider: RewriteProvider = .codexLuna
     ) {
         self.text = text
         self.intensity = RewriteIntensityPolicy.clampedLevel(intensity)
@@ -23,6 +38,7 @@ struct RewriteRequest: Equatable, Sendable {
         )
         self.customInstructionsExclusive = self.customInstructions != nil
             && customInstructionsExclusive
+        self.provider = provider
     }
 }
 
@@ -34,7 +50,7 @@ protocol RewriteGenerating: Sendable {
 }
 
 struct RewriteEngine: Sendable {
-    static let shared = RewriteEngine(generator: LocalModelService.shared)
+    static let shared = RewriteEngine(generator: RewriteProviderRouter.shared)
 
     private let generator: any RewriteGenerating
     private let timeoutSeconds: @Sendable (Int) -> Double

@@ -63,13 +63,24 @@ if (( ${#source_apps} == 0 )); then
     exit 1
 fi
 source_app=${source_apps[1]}
+codesign --verify --deep --strict "$source_app"
 
 case "$installed_app" in
     "$install_dir/RewriteBar.app") ;;
     *) print -u2 "Unexpected installation path"; exit 1 ;;
 esac
 
-pkill -x RewriteBar 2>/dev/null || true
+if [[ -e "$installed_app" ]]; then
+    pkill -x RewriteBar 2>/dev/null || true
+    for attempt in {1..30}; do
+        pgrep -x RewriteBar >/dev/null || break
+        sleep 0.1
+    done
+    if pgrep -x RewriteBar >/dev/null; then
+        print -u2 "RewriteBar is still closing. Quit it and run the installer again."
+        exit 1
+    fi
+fi
 if [[ -e "$installed_app" ]]; then
     rm -rf "$installed_app"
 fi
