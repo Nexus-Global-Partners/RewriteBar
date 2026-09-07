@@ -35,18 +35,18 @@ final class CodexAccountController: ObservableObject {
         case .checking:
             return "Checking Codex…"
         case .disconnected:
-            return "Sign in to use Luna"
+            return "Connect your ChatGPT account"
         case .connecting:
             return "Finish sign-in in your browser…"
         case .connected(let plan, let lunaAvailable, let usedPercent):
-            guard lunaAvailable else { return "Luna is not available on this account" }
+            guard lunaAvailable else { return "The rewrite model is unavailable on this account" }
             var components = [plan.map { "Connected · \($0.capitalized)" } ?? "Connected"]
             if let usedPercent {
                 components.append("\(Int(usedPercent.rounded()))% used")
             }
             return components.joined(separator: " · ")
         case .unavailable:
-            return "Install or update the ChatGPT app to use Luna"
+            return "Install or update the Codex app"
         case .failed(let message):
             return message
         }

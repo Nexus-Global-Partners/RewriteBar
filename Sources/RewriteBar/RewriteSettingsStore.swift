@@ -99,13 +99,17 @@ final class RewriteSettingsStore: ObservableObject {
     @Published var defaultIntensity: Int {
         didSet {
             let clamped = min(10, max(0, defaultIntensity))
-            guard defaultIntensity == clamped else {
-                defaultIntensity = clamped
-                return
-            }
+            if defaultIntensity != clamped { defaultIntensity = clamped }
             defaults.set(defaultIntensity, forKey: Key.defaultIntensity)
+            sessionIntensity.setDefault(defaultIntensity)
         }
     }
+
+    @Published private(set) var sessionIntensity = SessionIntensity()
+
+    var activeIntensity: Int { sessionIntensity.activeLevel }
+    func selectIntensity(_ value: Int) { sessionIntensity.select(value) }
+    func resetIntensity() { sessionIntensity.reset() }
 
     @Published var rewriteProvider: RewriteProvider {
         didSet { defaults.set(rewriteProvider.rawValue, forKey: Key.rewriteProvider) }
@@ -142,7 +146,7 @@ final class RewriteSettingsStore: ObservableObject {
 
         rewriteProvider = defaults.string(forKey: Key.rewriteProvider)
             .flatMap(RewriteProvider.init(rawValue:))
-            ?? .local
+            ?? .codexLuna
 
         if defaults.object(forKey: Key.defaultIntensity) == nil {
             defaultIntensity = 3
@@ -184,6 +188,7 @@ final class RewriteSettingsStore: ObservableObject {
         )
         customInstructions = defaults.string(forKey: Key.customInstructions) ?? ""
         shortcutRegistrationError = nil
+        sessionIntensity = SessionIntensity(defaultLevel: defaultIntensity)
     }
 
     func saveCustomInstructions(_ value: String) {
@@ -200,7 +205,7 @@ final class RewriteSettingsStore: ObservableObject {
     }
 
     func resetAll() {
-        rewriteProvider = .local
+        rewriteProvider = .codexLuna
         defaultIntensity = 3
         writingStyle = .rewriteBar
         keyboardShortcut = .rewriteDefault

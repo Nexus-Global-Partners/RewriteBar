@@ -44,7 +44,7 @@ final class SelectedTextRewriteCoordinator: ObservableObject {
         writingStyle: RewriteStyle = .rewriteBar,
         customInstructions: String? = nil,
         customInstructionsExclusive: Bool = false,
-        provider: RewriteProvider = .local,
+        provider: RewriteProvider = .codexLuna,
         promptingForPermission: Bool = false
     ) {
         guard rewriteTask == nil else {

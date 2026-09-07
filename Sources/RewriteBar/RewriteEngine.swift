@@ -2,17 +2,14 @@ import Foundation
 import RewriteCore
 
 enum RewriteProvider: String, CaseIterable, Codable, Identifiable, Sendable {
-    case local
     case codexLuna
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .local:
-            "On this Mac"
         case .codexLuna:
-            "Codex Luna (online)"
+            "Codex"
         }
     }
 }
@@ -31,7 +28,7 @@ struct RewriteRequest: Equatable, Sendable {
         writingStyle: RewriteStyle = .rewriteBar,
         customInstructions: String? = nil,
         customInstructionsExclusive: Bool = false,
-        provider: RewriteProvider = .local
+        provider: RewriteProvider = .codexLuna
     ) {
         self.text = text
         self.intensity = RewriteIntensityPolicy.clampedLevel(intensity)

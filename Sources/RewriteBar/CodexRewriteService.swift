@@ -24,7 +24,7 @@ actor CodexRewriteService: RewriteGenerating {
         } catch is CancellationError {
             return
         } catch {
-            logger.notice("Codex Luna warm-up is unavailable; local fallback remains ready")
+            logger.notice("Codex connection is not ready")
         }
     }
 

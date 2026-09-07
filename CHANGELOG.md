@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.0
+
+* Rebuilt around selected text and the global shortcut. The menu bar contains a single bare intensity slider.
+* The slider now controls shortcut rewrites. Settings save the default; menu adjustments last until reset or relaunch.
+* Codex is the only rewrite engine. Removed bundled model weights, MLX, model downloads, and local fallback.
+* Replaced the crowded Settings form with a compact frosted window, clear account setup, and optional writing preferences.
+* Press the shortcut again to cancel. Changing the slider returns focus to the previous app.
+* Added Open at Login and actionable connection, account, usage, and timeout feedback.
+* Preserved isolated ChatGPT sign-in, disabled model tools, structured output, source protection, and guarded selection replacement.
+
+
 ## 1.4.0
 
 * Adds an optional Codex Luna online processing mode backed by a user's ChatGPT subscription, while keeping the bundled Qwen model as the default.

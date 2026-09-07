@@ -25,4 +25,4 @@ if [[ -f "$testing_libraries/lib_TestingInterop.dylib" ]]; then
     )
 fi
 
-swift test "${test_arguments[@]}"
+swift test "${test_arguments[@]}" "$@"

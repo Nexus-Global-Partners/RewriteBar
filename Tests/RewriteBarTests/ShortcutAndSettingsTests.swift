@@ -187,7 +187,7 @@ func settingsUseProductDefaultsAndPersistChanges() throws {
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
     let store = RewriteSettingsStore(defaults: defaults)
-    #expect(store.rewriteProvider == .local)
+    #expect(store.rewriteProvider == .codexLuna)
     #expect(store.defaultIntensity == 3)
     #expect(store.writingStyle == .rewriteBar)
     #expect(store.keyboardShortcut == .rewriteDefault)
@@ -219,7 +219,7 @@ func settingsUseProductDefaultsAndPersistChanges() throws {
     #expect(!reloaded.customInstructionsExclusive)
 
     reloaded.resetAll()
-    #expect(reloaded.rewriteProvider == .local)
+    #expect(reloaded.rewriteProvider == .codexLuna)
     #expect(reloaded.keyboardShortcut == .rewriteDefault)
     #expect(reloaded.keyboardShortcut?.displayName == "⌥R")
 }
@@ -602,7 +602,7 @@ func settingsRecoverFromAnUnknownProviderValue() throws {
 
     let store = RewriteSettingsStore(defaults: defaults)
 
-    #expect(store.rewriteProvider == .local)
+    #expect(store.rewriteProvider == .codexLuna)
 }
 
 @MainActor
@@ -682,4 +682,27 @@ private final class AccessibilityPermissionState: @unchecked Sendable {
 
 private final class NotificationCounter: @unchecked Sendable {
     var value = 0
+}
+
+@Test @MainActor
+func menuIntensityControlsShortcutsAndRelaunchRestoresSavedDefault() throws {
+    let suite = "RewriteBarTests.Session.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let store = RewriteSettingsStore(defaults: defaults)
+    store.defaultIntensity = 4
+    #expect(store.activeIntensity == 4)
+    store.selectIntensity(8)
+    #expect(store.activeIntensity == 8)
+    #expect(store.defaultIntensity == 4)
+    let relaunched = RewriteSettingsStore(defaults: defaults)
+    #expect(relaunched.activeIntensity == 4)
+    store.resetIntensity()
+    #expect(store.activeIntensity == 4)
+    store.selectIntensity(9)
+    store.defaultIntensity = 6
+    #expect(store.activeIntensity == 6)
+    store.defaultIntensity = 99
+    #expect(store.activeIntensity == 10)
+    #expect(RewriteSettingsStore(defaults: defaults).defaultIntensity == 10)
 }

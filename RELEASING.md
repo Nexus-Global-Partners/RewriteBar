@@ -1,6 +1,6 @@
 # Releasing RewriteBar
 
-RewriteBar releases are built by GitHub Actions from a version tag. The app itself never checks the network for updates. On-device mode is network free; optional Codex Luna mode connects only for account status and requested rewrites. Existing users update by rerunning the verified install command from the README.
+RewriteBar releases are built by GitHub Actions from a version tag. The app itself never checks the network for updates. Codex connects for account status and explicitly requested rewrites. Existing users update by rerunning the verified install command from the README.
 
 ## Prepare the release
 
@@ -32,7 +32,7 @@ The script refuses to publish unless:
 * the tag does not already exist
 * the project checks pass
 
-It creates and pushes the matching version tag, waits for the Release workflow, then prints the published release URL. The workflow downloads the checksum pinned model, builds and signs the app, creates `RewriteBar.zip`, creates its SHA256 file, and publishes both assets.
+It creates and pushes the matching version tag, waits for the Release workflow, then prints the published release URL. The workflow builds and signs the dependency-free app, creates `RewriteBar.zip`, creates its SHA256 file, and publishes both assets.
 
 ## Verify the public update
 

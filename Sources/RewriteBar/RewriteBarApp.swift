@@ -11,7 +11,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         subsystem: AppConstants.bundleIdentifier,
         category: "Lifecycle"
     )
-    private let viewModel = RewriteViewModel()
     private let settings = RewriteSettingsStore.shared
     private let clipboard = ClipboardService()
     private let hotKeyRegistrar = GlobalHotKeyRegistrar()
@@ -24,7 +23,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var shortcutSettingsObservation: AnyCancellable?
     private var shortcutRecordingBeginObservation: AnyCancellable?
     private var shortcutRecordingEndObservation: AnyCancellable?
-    private var providerSettingsObservation: AnyCancellable?
     private var codexAccountObservation: AnyCancellable?
     private var previousCodexAccountState: CodexAccountController.State = .idle
     private var statusFeedbackTask: Task<Void, Never>?
@@ -35,8 +33,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         configurePopover()
         configureStatusItem()
         configureShortcutFlow()
-        configureProviderWarmup()
+        CodexAccountController.shared.refresh()
         configureCodexConnectionFeedback()
+        if !UserDefaults.standard.bool(forKey: "settings.didPresentVersion2Setup") {
+            UserDefaults.standard.set(true, forKey: "settings.didPresentVersion2Setup")
+            SettingsWindowController.shared.show()
+        }
         logger.notice("Application launched")
     }
 
@@ -60,8 +62,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     func popoverDidClose(_ notification: Notification) {
-        viewModel.popoverClosed()
-
         let applicationToRestore = restoresFocusAfterClose
             ? previouslyActiveApplication
             : nil
@@ -75,10 +75,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 options: []
             )
         }
-    }
-
-    func popoverWillShow(_ notification: Notification) {
-        viewModel.popoverOpened()
     }
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
@@ -99,14 +95,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
+    func showIntensity() {
+        guard let button = statusItem?.button else { return }
+        if !popover.isShown { togglePopover(button) }
+    }
+
     private func configurePopover() {
         popover.behavior = .transient
-        popover.animates = true
-        popover.contentSize = NSSize(width: 292, height: 156)
+        popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        popover.contentSize = NSSize(width: 252, height: 60)
         popover.delegate = self
         popover.contentViewController = NSHostingController(
             rootView: PopoverView(
-                viewModel: viewModel,
+                settings: settings,
                 close: { [weak self] in
                     self?.closeAfterCompletion()
                 },
@@ -142,7 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         button.title = "∞"
         button.font = .systemFont(ofSize: 16, weight: .medium)
-        button.toolTip = "RewriteBar"
+        button.toolTip = "RewriteBar · Click for intensity · Right-click for Settings"
         button.setAccessibilityLabel("RewriteBar")
         button.target = self
         button.action = #selector(togglePopover(_:))
@@ -200,17 +201,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             }
     }
 
-    private func configureProviderWarmup() {
-        providerSettingsObservation = settings.$rewriteProvider
-            .removeDuplicates()
-            .sink { provider in
-                guard provider == .codexLuna else { return }
-                Task.detached(priority: .utility) {
-                    await CodexRewriteService.shared.warmUp()
-                }
-            }
-    }
-
     private func configureCodexConnectionFeedback() {
         codexAccountObservation = CodexAccountController.shared.$state
             .removeDuplicates()
@@ -258,15 +248,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func startSelectedTextRewrite() {
         guard !shortcutCoordinator.isRewriting else {
-            showShortcutFailure(.rewriteAlreadyRunning)
+            shortcutCoordinator.cancel()
+            showTemporaryStatus(title: "∞", toolTip: "Rewrite cancelled", duration: .seconds(1))
             return
         }
 
+        if popover.isShown {
+            closeAfterCompletion()
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(100))
+                self?.startSelectedTextRewrite()
+            }
+            return
+        }
         statusFeedbackTask?.cancel()
         statusFeedbackTask = nil
         showStatusProgress(toolTip: "Rewriting selected text")
         shortcutCoordinator.startRewrite(
-            intensity: settings.defaultIntensity,
+            intensity: settings.activeIntensity,
             writingStyle: settings.writingStyle,
             customInstructions: settings.customInstructionsEnabled
                 ? settings.customInstructions
@@ -311,6 +310,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             fontSize: ShortcutFailureFeedbackPolicy.fontSize
         )
 
+        if failure == .rewriteFailed(.accountRequired) || failure == .rewriteFailed(.runtimeRequired) {
+            SettingsWindowController.shared.show()
+        }
         if failure == .permissionRequired {
             if accessibilityRecovery.shouldBeginSetup(for: failure) {
                 AccessibilityPermission.beginSetup()
@@ -382,6 +384,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         )
         settingsItem.target = self
         menu.addItem(settingsItem)
+        let defaultItem = NSMenuItem(
+            title: "Use default (\(settings.defaultIntensity))",
+            action: #selector(resetIntensity),
+            keyEquivalent: ""
+        )
+        defaultItem.target = self
+        defaultItem.state = settings.sessionIntensity.isOverridden ? .off : .on
+        menu.addItem(defaultItem)
+        menu.addItem(.separator())
 
         let aboutItem = NSMenuItem(
             title: "About RewriteBar",
@@ -402,6 +413,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         NSMenu.popUpContextMenu(menu, with: event, for: button)
     }
+
+    @objc private func resetIntensity() { settings.resetIntensity() }
 
     @objc private func openSettings() {
         if popover.isShown {
@@ -429,7 +442,7 @@ final class MenuBarProgressIndicator: NSView {
         isHidden = true
 
         arcLayer.fillColor = NSColor.clear.cgColor
-        arcLayer.strokeColor = NSColor.white.cgColor
+        arcLayer.strokeColor = NSColor.labelColor.cgColor
         arcLayer.lineWidth = 1.8
         arcLayer.lineCap = .round
         arcLayer.strokeStart = 0.08
@@ -444,6 +457,13 @@ final class MenuBarProgressIndicator: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            arcLayer.strokeColor = NSColor.labelColor.cgColor
+        }
     }
 
     override func layout() {
@@ -513,8 +533,16 @@ enum ShortcutFailureFeedbackPolicy {
             return "Shortcut error"
         case .accessibilityFailure:
             return "Accessibility error"
-        case .rewriteFailed:
-            return "Rewrite failed"
+        case .rewriteFailed(let error):
+            switch error {
+            case .accountRequired: return "Connect Codex"
+            case .runtimeRequired: return "Install Codex"
+            case .usageLimitReached: return "Usage limit"
+            case .connectionFailed: return "Check connection"
+            case .timedOut: return "Try again"
+            case .textTooLong: return "Text too long"
+            default: return "Rewrite failed"
+            }
         }
     }
 }
@@ -532,15 +560,17 @@ enum ShortcutCopyOnlyFeedbackPolicy {
 struct RewriteBarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
-    init() {
-        Task.detached(priority: .userInitiated) {
-            await LocalModelService.shared.warmUp()
-        }
-    }
-
     var body: some Scene {
         Settings {
             EmptyView()
+        }
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") { SettingsWindowController.shared.show() }
+                    .keyboardShortcut(",", modifiers: .command)
+                Button("Show Intensity") { appDelegate.showIntensity() }
+                    .keyboardShortcut("i", modifiers: .command)
+            }
         }
     }
 }

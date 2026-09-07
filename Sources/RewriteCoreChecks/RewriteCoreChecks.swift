@@ -523,25 +523,20 @@ enum RewriteCoreChecks {
 
     private static func checkGenerationBudget() throws {
         try require(
-            AppConstants.keepsModelResident,
-            "The warmed model must remain resident to avoid a cold reload."
-        )
-        try require(
-            AppConstants.modelCacheLimitBytes == 1_024 * 1_024 * 1_024,
-            "The MLX cache limit changed unexpectedly."
-        )
-        try require(
             AppConstants.codexLunaModelIdentifier == "gpt-5.6-luna",
-            "The optional Codex model must remain pinned to Luna."
+            "The Codex model must remain pinned to Luna."
         )
-        try require(
-            CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 20) == 7.01,
-            "Short Luna attempts should finish healthy work without consuming the overall deadline."
-        )
-        try require(
-            CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 2_000) == 8.0,
-            "Long Luna attempts must leave time for the warmed local fallback."
-        )
+        var session = SessionIntensity(defaultLevel: 3)
+        try require(session.activeLevel == 3, "A fresh session uses the saved default.")
+        session.select(8)
+        try require(session.activeLevel == 8 && session.defaultLevel == 3, "A menu adjustment changes shortcut intensity without changing the default.")
+        session.reset()
+        try require(session.activeLevel == 3, "Reset restores the default intensity.")
+        session.select(100)
+        try require(session.activeLevel == 10, "Menu intensity stays in range.")
+        session.setDefault(5)
+        try require(session.activeLevel == 5 && !session.isOverridden, "Changing the default clears the session override.")
+
         try require(
             !RewriteOutputQualityPolicy.isVisibleCompletion(
                 source: "Rewrite this",

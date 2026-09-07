@@ -42,8 +42,8 @@ for source_item in \
     SECURITY.md \
     BrandAssets \
     Configuration \
-    ModelAssets/MLX \
     Scripts \
+    Tests \
     Sources; do
     if [[ -e "$project_dir/$source_item" ]]; then
         ditto "$project_dir/$source_item" "$source_folder/$source_item"

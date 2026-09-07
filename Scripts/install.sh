@@ -16,10 +16,20 @@ case "$installed_app" in
     *) print -u2 "Unexpected installation path"; exit 1 ;;
 esac
 
+pkill -x RewriteBar 2>/dev/null || true
+for attempt in {1..30}; do
+    pgrep -x RewriteBar >/dev/null || break
+    sleep 0.1
+done
+if pgrep -x RewriteBar >/dev/null; then
+    print -u2 "RewriteBar is still closing. Quit it and run the installer again."
+    exit 1
+fi
 if [[ -e "$installed_app" ]]; then
     rm -rf "$installed_app"
 fi
 
 ditto "$source_app" "$installed_app"
 print "Installed $installed_app"
-print "Open it once from Finder, then use the infinity icon in the menu bar."
+codesign --verify --deep --strict "$installed_app"
+open "$installed_app"

@@ -4,177 +4,45 @@ import Testing
 @testable import RewriteBar
 
 @Test
-func providerRouterUsesOnlyTheLocalGeneratorByDefault() async throws {
-    let local = ProviderGeneratorStub(behavior: .output("Local"))
-    let codex = ProviderGeneratorStub(behavior: .output("Luna"))
-    let router = RewriteProviderRouter(local: local, codex: codex)
-
-    let result = try await router.rewrite(
-        request: RewriteRequest(text: "Source", intensity: 3),
-        onProgress: nil
-    )
-
-    #expect(result == "Local")
-    #expect(await local.requestCount == 1)
-    #expect(await codex.requestCount == 0)
-}
-
-@Test
-func providerRouterReturnsLunaWithoutStartingLocalGeneration() async throws {
-    let local = ProviderGeneratorStub(behavior: .output("Local"))
-    let codex = ProviderGeneratorStub(behavior: .output("Luna"))
-    let router = RewriteProviderRouter(local: local, codex: codex)
-
-    let result = try await router.rewrite(
-        request: RewriteRequest(
-            text: "Source",
-            intensity: 3,
-            provider: .codexLuna
-        ),
-        onProgress: nil
-    )
-
-    #expect(result == "Luna")
-    #expect(await local.requestCount == 0)
+func onlineProviderIsTheDefaultAndForwardsProgress() async throws {
+    let codex = ProviderGeneratorStub(behavior: .output("Improved source"))
+    let progress = ProgressRecorder()
+    let router = RewriteProviderRouter(codex: codex)
+    let request = RewriteRequest(text: "Source", intensity: 3)
+    #expect(request.provider == .codexLuna)
+    let output = try await router.rewrite(request: request, onProgress: { await progress.record($0) })
+    #expect(output == "Improved source")
     #expect(await codex.requestCount == 1)
+    #expect(await progress.values == [4])
 }
 
 @Test
-func providerRouterFallsBackToLocalExactlyOnceAfterOnlineFailure() async throws {
-    let local = ProviderGeneratorStub(behavior: .output("Local"))
+func onlineFailureDoesNotStartAnotherGeneration() async throws {
     let codex = ProviderGeneratorStub(behavior: .failure)
-    let router = RewriteProviderRouter(local: local, codex: codex)
-
-    let result = try await router.rewrite(
-        request: RewriteRequest(
-            text: "Source",
-            intensity: 3,
-            provider: .codexLuna
-        ),
-        onProgress: nil
-    )
-
-    #expect(result == "Local")
-    #expect(await local.requestCount == 1)
+    let router = RewriteProviderRouter(codex: codex)
+    await #expect(throws: ProviderTestError.failed) {
+        try await router.rewrite(request: RewriteRequest(text: "Source", intensity: 3), onProgress: nil)
+    }
     #expect(await codex.requestCount == 1)
 }
 
 @Test
-func providerRouterPreservesTimeForTheLocalFallback() async throws {
-    let local = ProviderGeneratorStub(behavior: .output("Local"))
-    let codex = ProviderGeneratorStub(
-        behavior: .delayed(.seconds(1), "Late")
-    )
-    let router = RewriteProviderRouter(
-        local: local,
-        codex: codex,
-        codexAttemptSeconds: 0.02
-    )
-
-    let result = try await router.rewrite(
-        request: RewriteRequest(
-            text: "Source",
-            intensity: 3,
-            provider: .codexLuna
-        ),
-        onProgress: nil
-    )
-
-    #expect(result == "Local")
-    #expect(await local.requestCount == 1)
-    #expect(await codex.wasCancelled)
-}
-
-@Test
-func codexAttemptPolicyScalesWithinTheFallbackBudget() {
-    #expect(CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 20) == 7.01)
-    #expect(CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 2_000) == 8.0)
-    #expect(CodexAttemptPolicy.timeoutSeconds(forCharacterCount: 20_000) == 8.0)
-}
-
-@Test
-func providerRouterRetriesAnUnchangedOnlineResultLocally() async throws {
-    let local = ProviderGeneratorStub(behavior: .output("Local rewrite"))
-    let codex = ProviderGeneratorStub(behavior: .output("Source"))
-    let router = RewriteProviderRouter(local: local, codex: codex)
-
-    let result = try await router.rewrite(
-        request: RewriteRequest(
-            text: "Source",
-            intensity: 3,
-            provider: .codexLuna
-        ),
-        onProgress: nil
-    )
-
-    #expect(result == "Local rewrite")
-    #expect(await codex.requestCount == 1)
-    #expect(await local.requestCount == 1)
-}
-
-@Test
-func providerRouterRejectsAnUnchangedLocalRewrite() async throws {
-    let local = ProviderGeneratorStub(behavior: .output("Source"))
-    let codex = ProviderGeneratorStub(behavior: .output("Unused"))
-    let router = RewriteProviderRouter(local: local, codex: codex)
-
-    do {
-        _ = try await router.rewrite(
-            request: RewriteRequest(text: "Source", intensity: 3),
-            onProgress: nil
-        )
-        Issue.record("An unchanged rewrite was reported as successful.")
-    } catch let error as RewriteError {
-        #expect(error == .generationFailed)
-    }
-}
-
-@Test
-func providerRouterAllowsAnUnchangedProofreadResult() async throws {
-    let local = ProviderGeneratorStub(behavior: .output("Already correct."))
-    let codex = ProviderGeneratorStub(behavior: .output("Unused"))
-    let router = RewriteProviderRouter(local: local, codex: codex)
-
-    let result = try await router.rewrite(
-        request: RewriteRequest(text: "Already correct.", intensity: 0),
-        onProgress: nil
-    )
-
-    #expect(result == "Already correct.")
-}
-
-@Test
-func providerRouterNeverFallsBackAfterUserCancellation() async throws {
-    let local = ProviderGeneratorStub(behavior: .output("Local"))
-    let codex = ProviderGeneratorStub(
-        behavior: .delayed(.seconds(1), "Late")
-    )
-    let router = RewriteProviderRouter(
-        local: local,
-        codex: codex,
-        codexAttemptSeconds: 2
-    )
-    let task = Task {
-        try await router.rewrite(
-            request: RewriteRequest(
-                text: "Source",
-                intensity: 3,
-                provider: .codexLuna
-            ),
-            onProgress: nil
-        )
-    }
-
+func onlineCancellationStopsWork() async throws {
+    let codex = ProviderGeneratorStub(behavior: .delayed(.seconds(1), "Late"))
+    let router = RewriteProviderRouter(codex: codex)
+    let task = Task { try await router.rewrite(request: RewriteRequest(text: "Source", intensity: 3), onProgress: nil) }
     try await Task.sleep(for: .milliseconds(20))
     task.cancel()
+    await #expect(throws: RewriteError.cancelled) { try await task.value }
+    #expect(await codex.wasCancelled)
+    #expect(await codex.requestCount == 1)
+}
 
-    do {
-        _ = try await task.value
-        Issue.record("A cancelled online rewrite unexpectedly completed.")
-    } catch let error as RewriteError {
-        #expect(error == .cancelled)
-    }
-    #expect(await local.requestCount == 0)
+@Test
+func alreadyCorrectTextIsAValidOnlineResult() async throws {
+    let router = RewriteProviderRouter(codex: ProviderGeneratorStub(behavior: .output("Already correct.")))
+    let result = try await router.rewrite(request: RewriteRequest(text: "Already correct.", intensity: 3), onProgress: nil)
+    #expect(result == "Already correct.")
 }
 
 @Test
@@ -209,25 +77,6 @@ func liveCodexLunaUsesTheIsolatedPersistentAppServer() async throws {
     #expect(output.contains("Friday"))
     #expect(!output.isEmpty)
     #expect(duration < .seconds(18))
-}
-
-@Test
-func providerRouterForwardsProgressFromTheSelectedGenerator() async throws {
-    let local = ProviderGeneratorStub(behavior: .output("Local"))
-    let codex = ProviderGeneratorStub(behavior: .output("Luna"))
-    let progress = ProgressRecorder()
-    let router = RewriteProviderRouter(local: local, codex: codex)
-
-    _ = try await router.rewrite(
-        request: RewriteRequest(
-            text: "Source",
-            intensity: 3,
-            provider: .codexLuna
-        ),
-        onProgress: { count in await progress.record(count) }
-    )
-
-    #expect(await progress.values == [4])
 }
 
 @Test
@@ -788,4 +637,44 @@ private actor ProgressRecorder {
     func record(_ value: Int) {
         values.append(value)
     }
+}
+
+@Test
+func liveCodexQualityAndLatencyAcrossIntensities() async throws {
+    guard ProcessInfo.processInfo.environment["REWRITEBAR_RUN_LIVE_QUALITY_TEST"] == "1" else { return }
+    let client = CodexAppServerClient()
+    let engine = RewriteEngine(generator: RewriteProviderRouter(codex: CodexRewriteService(client: client)))
+    _ = try await client.accountSnapshot()
+    let cases: [(String, Int)] = [
+        ("The report are ready, and we can send it on Friday.", 0),
+        ("The report are ready, and we can send it on Friday.", 3),
+        ("The report are ready, and we can send it on Friday.", 5),
+        ("The report are ready, and we can send it on Friday.", 10),
+        ("je pense que le rapport est pret mais je ne suis pas totalement sur. on peut le verifier demain.", 3),
+        ("I didnt send the update because the numbers wasnt ready. We might have the final figures on Friday.", 3),
+        ("The launch is on 12 September. We have 18 confirmed guests, and we might add 3 more.", 5),
+        ("Please keep the wording \"not approved\" in the note. We could send it on Friday.", 3)
+    ]
+    do {
+        for (index, sample) in cases.enumerated() {
+            let started = ContinuousClock.now
+            let output = try await engine.rewrite(RewriteRequest(text: sample.0, intensity: sample.1))
+            let elapsed = started.duration(to: .now)
+            #expect(!output.isEmpty)
+            #expect(OutputFidelityValidator.evaluate(source: sample.0, output: output).preservesMeaningSignals)
+            if index < 4 {
+                #expect(!output.contains("report are"))
+                #expect(output.contains("Friday"))
+                #expect(output.contains("can"))
+            }
+            if index == 4 { #expect(RewritePromptBuilder.detectedLanguageDescription(for: output).contains("French")) }
+            if index == 5 { #expect(!output.contains("didnt")); #expect(!output.contains("wasnt")) }
+            if index == 7 { #expect(output.contains("\"not approved\"")) }
+            print("Live quality case \(index + 1), level \(sample.1): \(elapsed)")
+        }
+    } catch {
+        await client.shutdown()
+        throw error
+    }
+    await client.shutdown()
 }

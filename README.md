@@ -1,225 +1,78 @@
-<p align="center">
-  <img src="BrandAssets/infinity-app-icon.svg" width="112" alt="RewriteBar icon">
-</p>
+<div align="center">
 
-<h1 align="center">RewriteBar</h1>
+# ∞ RewriteBar
 
-<p align="center">Select text, press Option R, and keep writing. A private on-device macOS rewriter with optional Codex Luna quality.</p>
+**Your words. A little clearer.**
 
-<p align="center">
-  <img src="BrandAssets/rewritebar-menu-bar.png" width="800" alt="RewriteBar open from the macOS menu bar with its rewrite intensity slider">
-</p>
+Select text. Press **⌥R**. Keep writing.
 
-<p align="center">
-  <a href="#install">
-    <img src="https://img.shields.io/badge/Install_RewriteBar-macOS-111111?style=for-the-badge&logo=apple&logoColor=white" alt="Install RewriteBar for macOS">
-  </a>
-</p>
+A tiny Mac menu bar app with one slider and one shortcut.
 
-<p align="center">
-  <a href="https://github.com/Nexus-Global-Partners/RewriteBar/actions/workflows/ci.yml"><img src="https://github.com/Nexus-Global-Partners/RewriteBar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/Nexus-Global-Partners/RewriteBar/releases/latest"><img src="https://img.shields.io/github/v/release/Nexus-Global-Partners/RewriteBar" alt="Latest release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-black" alt="MIT License"></a>
-</p>
+[Download](https://github.com/Nexus-Global-Partners/RewriteBar/releases/latest) · [Source](https://github.com/Nexus-Global-Partners/RewriteBar) · [Report an issue](https://github.com/Nexus-Global-Partners/RewriteBar/issues)
 
-RewriteBar removes the usual copy, switch app, prompt, copy again loop. Select editable text, press one shortcut, and the rewrite replaces your selection in place. The result is also copied automatically.
+</div>
 
-* **One shortcut:** Option R rewrites the selected text without opening another editor.
-* **Ready by default:** Level 3 and the RewriteBar writing style provide a balanced, natural rewrite without tuning any writing settings.
-* **Fully personal:** Choose an intensity from 0 through 10, one of five writing styles, your own shortcut, and custom instructions that either add to a style or replace it.
-* **Private by default:** Qwen3 1.7B runs on your Mac through MLX with no account, server, telemetry, analytics, or runtime network access.
-* **Optional Luna quality:** Explicitly choose Codex Luna in Settings to rewrite through your ChatGPT subscription. RewriteBar uses isolated ephemeral threads and falls back to the local model automatically.
-* **Open source and agent ready:** Change the code yourself, or give the repository to a coding agent. The project includes the context, checks, and local installation scripts needed to make a safe update.
+![RewriteBar's single intensity slider](BrandAssets/rewritebar-slider.png)
 
-## Product idea
+## How it works
 
-RewriteBar explores a different approach to writing software. The tool should meet you where you already write instead of pulling you into another editor, tab, or conversation.
+1. Select text in a compatible editable field.
+2. Press **Option R**. RewriteBar revises the selection and copies the result.
+3. Keep writing. A small indicator in the menu bar shows progress and completion.
 
-The default model is local, open, offline, and specialized around one task. People who deliberately choose online processing can use Codex Luna through their ChatGPT subscription without changing the daily interaction. The interface stays deliberately small. Personalization and processing choices live behind a native Settings window rather than inside the main interaction.
+Click **∞** to change intensity from **0** (proofread) to **10** (rephrase completely while preserving meaning). The slider closes when you finish adjusting it and returns you to your editor. Your chosen level applies to following shortcuts until you quit or choose **Use default**.
 
-Extreme minimalism here does not mean removing useful capability. It means giving the default path one action while keeping deeper control available when you want it:
-
-1. Select text.
-2. Press Option R.
-3. Continue writing.
-
-The default is designed to work immediately and privately. Settings let you define your processing mode, intensity, writing style, shortcut, and custom writing instructions without adding controls to the daily interaction.
+Right-click **∞** for **Settings**. Save your default intensity, record another shortcut, connect your account, and optionally add writing preferences. Defaults start at level **3**. Press the shortcut again during a rewrite to cancel.
 
 ## Install
 
-Requires an Apple Silicon Mac with macOS 14 or newer.
+Requires an Apple Silicon Mac, macOS 14 or newer, a current official [Codex app](https://chatgpt.com/codex), an eligible ChatGPT account with Codex access, and internet connectivity.
 
-The recommended installation verifies the release checksum and avoids the browser quarantine warning applied to direct downloads:
+> Version 2 is being prepared in [the release pull request](https://github.com/Nexus-Global-Partners/RewriteBar/pull/5). The latest published release may still be version 1. To try version 2 before publication, build the `codex/luna-online-rewrites` branch using the development instructions below.
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/Nexus-Global-Partners/RewriteBar/main/Scripts/install-release.sh | zsh
-```
-
-You can also download `RewriteBar.zip` from the [latest release](https://github.com/Nexus-Global-Partners/RewriteBar/releases/latest), expand it, and move the app to Applications. Browser downloads are quarantined by macOS.
-
-The public build is ad hoc signed, not notarized with an Apple Developer ID. If macOS blocks a manually downloaded copy, open System Settings, choose Privacy & Security, then select Open Anyway for RewriteBar. Only do this for the checksum verified release from this repository.
-
-## Update
-
-Rerun the same verified command whenever a new release is available:
+For a published release, install or update with:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Nexus-Global-Partners/RewriteBar/main/Scripts/install-release.sh | zsh
 ```
 
-It replaces the existing copy in `~/Applications`, verifies the signature, and opens the current release. RewriteBar performs no background update checks. On-device processing remains network free; if you explicitly select Codex Luna, only account checks and requested online rewrites use the network.
+The installer verifies the download checksum and app signature, installs to `~/Applications`, and opens RewriteBar. Public builds are ad hoc signed, not Apple notarized.
 
-## Use from the menu bar
+Open Settings, connect your ChatGPT account, and allow RewriteBar in **System Settings → Privacy & Security → Accessibility**. Enable **Open at login** if you want it always ready.
 
-1. Copy text in any app.
-2. Click the infinity icon in the menu bar.
-3. Choose an intensity from 0 through 10.
-4. Press Rewrite.
-5. The finished rewrite is copied automatically, then the popover closes.
+## Small by design
 
-The slider becomes a minimal progress rail while RewriteBar works. Preparation occupies only the beginning of the rail. Once generation starts, progress follows the text actually produced by the model. When the rewrite is copied, the button briefly confirms Copied to Clipboard with a checkmark. A subtle curved arrow lets you restore the previous clipboard entry until you copy something else.
+* One slider, one shortcut, no permanent Dock icon.
+* Native Swift and SwiftUI, with no third-party Swift dependencies or bundled model weights.
+* Codex Luna through your ChatGPT subscription, with no API key to manage.
+* A persistent connection and cached account readiness reduce repeated setup work.
+* Rewrites preserve facts, uncertainty, language, quoted text, voice, paragraphs, and lists. Styles and custom instructions remain subordinate to those rules.
 
-The slider controls how much RewriteBar changes. Each number has a defined contract:
+Speed depends on the text, connection, and service load. Requests are limited to 2,000 visible characters and an 18-second deadline. Larger model downloads and offline fallback are not part of version 2.
 
-* 0 only fixes obvious spelling, grammar, and punctuation errors.
-* 1 makes essential corrections and very small clarity changes.
-* 2 lightly improves grammar, flow, and readability.
-* 3 gently rewrites awkward sentences without changing tone or meaning.
-* 4 moderately rewrites unclear or repetitive parts.
-* 5 freely improves wording, flow, and organization while preserving the message.
-* 6 noticeably restructures sentences and paragraphs where useful.
-* 7 substantially reworks most of the text while preserving intent.
-* 8 uses significant freedom in wording, tone, and structure.
-* 9 rebuilds the text almost entirely from its essential message and details.
-* 10 creates the strongest new version of the same idea with maximum structural freedom.
+## Your text, deliberately handled
 
-## Rewrite selected text
+Text is accessed only after the shortcut. Selected text and enabled writing preferences are sent to OpenAI for that rewrite. RewriteBar keeps no rewrite history and has no telemetry or analytics. OpenAI's account terms and data controls still apply.
 
-The default shortcut is `Option R`.
+The app uses a separate Codex sign-in area, temporary threads, structured output, and a restricted official runtime with model tools disabled. It never borrows your normal Codex projects, settings, or credentials. See [the security policy](SECURITY.md).
 
-1. Right click the infinity icon and open Settings.
-2. Allow RewriteBar in macOS Accessibility settings.
-3. Choose the shortcut intensity, writing style, and keyboard shortcut you prefer.
-4. Select editable text in another app.
-5. Press the shortcut.
+A result replaces text only if the original app, field, and selected range still match. If you move away, the completed result is copied and the menu bar says **Copied**. Password fields are refused. Some editors do not expose editable selections to macOS Accessibility and are unsupported.
 
-The infinity icon becomes a small progress indicator while the selected processing mode works. A checkmark confirms that the selection was rewritten and the result was copied. If the focused field or selection changes before completion, RewriteBar leaves the text untouched and keeps a successfully generated result on the clipboard.
+## Build and contribute
 
-The direct replacement path works in applications that expose a writable text selection through macOS Accessibility. Unsupported custom editors fail safely without simulating copy and paste or changing another field.
-
-## Settings
-
-Right click the infinity icon and choose Settings. You can configure:
-
-* Shortcut intensity, with level 3 as the initial default
-* On-device Qwen processing or optional Codex Luna online processing
-* RewriteBar, Clear, Professional, Conversational, or Persuasive writing style
-* Any available keyboard shortcut using Command, Control, or Option
-* Optional custom writing instructions, either added to the selected style or used exclusively
-* macOS Accessibility permission for selected text replacement
-
-Custom instructions save automatically as you type. By default, they add to the selected writing style. Turn on Exclusive to ignore the selected style and use only your custom instructions for presentation. Intensity and all source preservation rules still apply in both modes. Common preferences such as sentence length, directness, warmth, contractions, lowercase presentation, regional spelling, and punctuation are turned into explicit writing cues for the selected model. RewriteBar applies compatible preferences while ignoring requests that would invent facts, remove uncertainty, translate the source, change terminology, or alter meaning.
-
-Every style and custom preference remains subordinate to the source. RewriteBar must preserve truth, meaning, intent, uncertainty, language, important details, approximate length, tone of voice, and the recognizable style of the original writer. It rejects artificial filler, corporate language, sentence fragments, and dash characters.
-
-## Privacy
-
-On-device processing is the default. The bundled Qwen3 1.7B model runs in process with MLX, and clipboard or selected text is not sent over the network, displayed in the app, logged, or saved.
-
-Codex Luna is an explicit online option. Selecting it displays a disclosure that requested clipboard or selected text and any enabled custom instructions will be sent to OpenAI through the official installed ChatGPT or Codex app and the user's ChatGPT subscription. RewriteBar gives Codex its own private Application Support directory and home folder, so it does not load the user's other Codex projects, tools, skills, MCP servers, environment credentials, or files by default. Each rewrite uses an ephemeral thread, read-only sandbox with network access disabled for model actions, disabled approvals, disabled command, image-view, web, browser, computer, app, plugin, skill, workspace-dependency, and dynamic tools, and structured text output. Any unexpected tool event is refused and fails closed. RewriteBar never stores account credentials in UserDefaults or its logs. When online mode is selected, RewriteBar initializes the isolated runtime in the background and briefly reuses verified account and Luna availability so a foreground rewrite does not repeat those checks. If Luna cannot finish safely within its short, input-scaled attempt, the already warmed on-device model retries inside the same overall deadline.
-
-RewriteBar stores only local preferences: the selected processing mode, last menu intensity, shortcut intensity, writing style, shortcut, optional custom instructions, and whether those instructions are additive or exclusive. Codex manages its own sign-in material inside RewriteBar's private Codex support directory.
-
-Accessibility access is used only when the configured shortcut asks RewriteBar to read and replace the current editable selection. Secure text fields are refused. Before replacement, RewriteBar verifies that the application, focused element, and exact selected range are still the same. This keeps replacement safe while supporting dynamic editors that normalize selected text during generation.
-
-## Build from source
+Requires Swift 6.1 or newer. No model download is needed.
 
 ```sh
-git clone https://github.com/Nexus-Global-Partners/RewriteBar.git
+git clone --branch codex/luna-online-rewrites https://github.com/Nexus-Global-Partners/RewriteBar.git
 cd RewriteBar
-./Scripts/download-model.sh
+./Scripts/check-project.sh
 ./Scripts/install.sh
 ```
 
-`download-model.sh` downloads the exact model files used by the release and verifies every checksum before installation. Model weights and generated app bundles are intentionally excluded from Git. The small Apple Silicon MLX runtime library is pinned and checksum verified in the repository so clean release builds are reproducible.
+Read [AGENTS.md](AGENTS.md) for the product contract, architecture, and verification workflow. [CONTRIBUTING.md](CONTRIBUTING.md) covers pull requests; [RELEASING.md](RELEASING.md) covers public releases.
 
-## Make it yours, with or without an agent
+## Share
 
-RewriteBar is MIT licensed. You can fork it, change its writing policy or interface, run the checks, and install your own build. The default path needs no deployed service; optional Luna mode requires an installed, current ChatGPT or Codex app and a supported ChatGPT plan.
+Download the [untouched slider screenshot](BrandAssets/rewritebar-slider.png) or the larger [1536 × 1024 social image](BrandAssets/rewritebar-social.png), styled from that capture for LinkedIn and X. No personal text, account details, or desktop clutter appears in either image.
 
-If you use a coding agent, send it the repository and this instruction:
-
-```text
-Clone https://github.com/Nexus-Global-Partners/RewriteBar. Read AGENTS.md completely before changing anything. Implement the smallest coherent version of my request, preserve the product and privacy contracts, run ./Scripts/check-project.sh, then build and install the local app with ./Scripts/install.sh.
-```
-
-[AGENTS.md](AGENTS.md) gives the agent the product contract, architecture, important files, test expectations, and release rules. [CONTRIBUTING.md](CONTRIBUTING.md) explains the pull request workflow. The scripts in [`Scripts/`](Scripts/) provide checksum verified model setup, project checks, app builds, local installation, packaging, and guarded releases.
-
-Useful development commands:
-
-```sh
-swift build
-./Scripts/test.sh
-swift run RewriteCoreChecks
-./Scripts/build-app.sh
-./Scripts/package-release.sh
-```
-
-`Scripts/test.sh` runs the standard unit and integration suite, including a fixture-backed Codex App Server protocol test. `RewriteCoreChecks` provides an additional fast policy gate. The opt in `RewriteBenchmark` executable evaluates all eleven intensities against varied writing, fidelity, structure, safety, and latency cases using either the real bundled model or Codex Luna. Reports record the requested and actual provider separately from source-fidelity fallback.
-
-## Evaluation and testing
-
-* [RewriteBar 1.2.4 Performance Evaluation](Reports/RewriteBar%201.2.4%20Performance%20Evaluation.md) records an earlier latency improvement round.
-* [`Tests/RewriteBarTests`](Tests/RewriteBarTests) contains the standard unit and integration suite.
-* [`Sources/RewriteCoreChecks`](Sources/RewriteCoreChecks) contains fast model free policy checks.
-* [`Sources/RewriteBenchmark`](Sources/RewriteBenchmark) contains the opt in provider-neutral quality and latency harness.
-* [CHANGELOG.md](CHANGELOG.md) records the current shipped behavior and release history.
-
-## Try it
-
-### Light cleanup at level 3
-
-```text
-hey sorry i didnt reply sooner ive been busy moving and everything took longer then i expected. i should be able to send the files tomorrow morning but if not it will be around lunch, hope thats okay and thanks for being patient
-```
-
-### Team update at level 5
-
-```text
-Hey everyone, just wanted to touch base on the launch because we still dont have a final date. Some folks think Friday while others think next week. The onboarding flow looks better but the permissions screen is still confusing support got 18 questions yesterday. Maybe we should delay but im not totally sure. Please send your status and blockers by 4pm so we can decide today.
-```
-
-### Technical note at level 8
-
-```text
-API latency went from 180 ms to 640 ms between 09:10 and 09:35 UTC only in eu west 1. we dont know the cause yet but connection pool exhaustion after version 2.4.1 is the strongest guess because rolling back three instances reduced p95 latency around 38%. errors stayed below 0.7%, no data loss was found, and the US region wasnt affected. next we need to compare pool saturation before deciding if the remaining instances should be rolled back.
-```
-
-## Architecture
-
-* `RewriteCore` handles validation, all eleven intensity contracts, writing styles, prompt construction, source instruction protection, meaning checks, and safe output cleanup.
-* `RewriteEngine` gives the menu and shortcut paths one normalized, bounded generation interface.
-* `RewriteProviderRouter` sends explicitly online requests to Luna first and uses a short input-scaled attempt that preserves time for automatic local fallback.
-* `GenerationArbiter` serializes access to the local model and removes cancelled work from the queue.
-* `LocalModelService` loads the bundled model, generates text, validates meaning signals, and falls back safely if a model result changes a protected fact or relationship.
-* `CodexAppServerClient` uses the signed official Codex runtime with an isolated account area, brief readiness caching, ephemeral threads, restricted execution, streaming, and cancellation.
-* `CodexRewriteService` applies the same prompt protection, cleanup, personalization, and fidelity gates to Luna output.
-* `RewriteViewModel` owns rewrite, progress, automatic copy, restore, and failure states.
-* `SelectedTextRewriteCoordinator` owns the shortcut rewrite lifecycle and safe replacement.
-* `AccessibilitySelectionClient` captures and verifies editable selections without simulated keyboard input.
-* `RewriteSettingsStore` keeps preferences local and `SettingsView` provides the native settings experience.
-* AppKit owns the persistent menu bar item, global shortcut, status feedback, and popover lifecycle. SwiftUI provides the compact content, VoiceOver labels, and adaptive materials.
-
-RewriteBar is designed for messages, emails, and short passages. Inputs longer than 2,000 visible characters are rejected immediately so both interactions stay responsive and predictable. Accepted work is bounded to 18 seconds. Local generation is deterministic with thinking disabled; Luna skips extra reasoning delay and uses structured output.
-
-## Contribute
-
-Bug reports, feature ideas, and pull requests are welcome. Read [AGENTS.md](AGENTS.md) for the product contract and [CONTRIBUTING.md](CONTRIBUTING.md) for the shortest path to a useful pull request. Use [GitHub Issues](https://github.com/Nexus-Global-Partners/RewriteBar/issues) for actionable reports and [GitHub Discussions](https://github.com/Nexus-Global-Partners/RewriteBar/discussions) for questions and early ideas.
-
-Maintainers can follow [RELEASING.md](RELEASING.md) to validate, tag, publish, and verify an update with one guarded command.
-
-Please report security concerns using the private process in [SECURITY.md](SECURITY.md).
-
-## License
-
-RewriteBar source is available under the [MIT License](LICENSE). Qwen3 model weights are distributed under Apache 2.0. MLX Swift and MLX Swift LM retain their upstream MIT licenses.
+[MIT license](LICENSE) · Built by Nexus Global Partners
