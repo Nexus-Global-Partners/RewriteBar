@@ -503,7 +503,7 @@ enum CodexConnectionFeedbackPolicy {
         current: CodexAccountController.State
     ) -> Bool {
         guard case .connecting = previous,
-              case .connected(_, true, _) = current else {
+              case .connected(_, true) = current else {
             return false
         }
         return true

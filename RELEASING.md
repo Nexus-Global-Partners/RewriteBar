@@ -32,7 +32,7 @@ The script refuses to publish unless:
 * the tag does not already exist
 * the project checks pass
 
-It creates and pushes the matching version tag, waits for the Release workflow, then prints the published release URL. The workflow builds and signs the dependency-free app, creates `RewriteBar.zip`, creates its SHA256 file, and publishes both assets.
+It creates and pushes the matching version tag, reports the workflow status once, and returns while GitHub finishes publishing. Use `./Scripts/publish-release.sh --wait` only when you explicitly want to wait for completion. The workflow builds and signs the dependency-free app, creates `RewriteBar.zip`, creates its SHA256 file, and publishes both assets.
 
 ## Verify the public update
 

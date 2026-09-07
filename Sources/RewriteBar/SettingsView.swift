@@ -246,10 +246,7 @@ struct SettingsView: View {
         }
         .task {
             codexAccount.refresh()
-            while !Task.isCancelled {
-                accessibility.refresh()
-                try? await Task.sleep(for: .seconds(1))
-            }
+            accessibility.refresh()
         }
     }
 

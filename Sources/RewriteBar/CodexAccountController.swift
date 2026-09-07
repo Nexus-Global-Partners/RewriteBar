@@ -10,7 +10,7 @@ final class CodexAccountController: ObservableObject {
         case checking
         case disconnected
         case connecting
-        case connected(plan: String?, lunaAvailable: Bool, usedPercent: Double?)
+        case connected(plan: String?, lunaAvailable: Bool)
         case unavailable
         case failed(String)
     }
@@ -38,13 +38,9 @@ final class CodexAccountController: ObservableObject {
             return "Connect your ChatGPT account"
         case .connecting:
             return "Finish sign-in in your browser…"
-        case .connected(let plan, let lunaAvailable, let usedPercent):
+        case .connected(let plan, let lunaAvailable):
             guard lunaAvailable else { return "The rewrite model is unavailable on this account" }
-            var components = [plan.map { "Connected · \($0.capitalized)" } ?? "Connected"]
-            if let usedPercent {
-                components.append("\(Int(usedPercent.rounded()))% used")
-            }
-            return components.joined(separator: " · ")
+            return plan.map { "Connected · \($0.capitalized)" } ?? "Connected"
         case .unavailable:
             return "Install or update the Codex app"
         case .failed(let message):
@@ -58,7 +54,7 @@ final class CodexAccountController: ObservableObject {
     }
 
     var isLunaReady: Bool {
-        if case .connected(_, true, _) = state { return true }
+        if case .connected(_, true) = state { return true }
         return false
     }
 
@@ -83,8 +79,7 @@ final class CodexAccountController: ObservableObject {
                 if snapshot.isConnected {
                     state = .connected(
                         plan: snapshot.plan,
-                        lunaAvailable: snapshot.lunaAvailable,
-                        usedPercent: snapshot.usedPercent
+                        lunaAvailable: snapshot.lunaAvailable
                     )
                 } else {
                     state = .disconnected
@@ -119,8 +114,7 @@ final class CodexAccountController: ObservableObject {
                     if snapshot.isConnected {
                         state = .connected(
                             plan: snapshot.plan,
-                            lunaAvailable: snapshot.lunaAvailable,
-                            usedPercent: snapshot.usedPercent
+                            lunaAvailable: snapshot.lunaAvailable
                         )
                         return
                     }

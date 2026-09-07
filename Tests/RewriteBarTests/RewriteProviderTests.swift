@@ -222,7 +222,6 @@ func appServerClientUsesTheRestrictedLunaProtocol() async throws {
     #expect(concurrentAccount.isConnected)
     #expect(account.plan == "pro")
     #expect(account.lunaAvailable)
-    #expect(account.usedPercent == 5)
     let initializeCount = try String(
         contentsOf: fixtureHome.appendingPathComponent("initialize-count"),
         encoding: .utf8
@@ -251,20 +250,9 @@ func appServerClientUsesTheRestrictedLunaProtocol() async throws {
     #expect(!missingModelAccount.lunaAvailable)
     try fileManager.removeItem(at: modelModeURL)
 
-    let limitModeURL = fixtureHome.appendingPathComponent("fixture-limit-mode")
-    try Data("exhausted".utf8).write(to: limitModeURL)
-    #expect(try await client.accountSnapshot(forceRefresh: true).usedPercent == 100)
-    do {
-        _ = try await client.rewrite(
-            systemPrompt: "System rules",
-            userPrompt: "Rewrite source",
-            onProgress: nil
-        )
-        Issue.record("An exhausted Codex account started a rewrite.")
-    } catch let error as CodexRewriteError {
-        #expect(error == .usageLimitReached)
-    }
-    try fileManager.removeItem(at: limitModeURL)
+    // Restore readiness after the missing-model fixture. No cached rate-limit
+    // number can block this account; the rewrite endpoint is authoritative.
+    #expect(try await client.accountSnapshot(forceRefresh: true).lunaAvailable)
 
     let progress = ProgressRecorder()
     let output = try await client.rewrite(
@@ -376,7 +364,121 @@ func appServerClientUsesTheRestrictedLunaProtocol() async throws {
         #expect(error == .protocolViolation)
     }
     #expect(try await client.accountSnapshot().isConnected)
+
+    for prompt in ["EndpointUsageLimit", "CompletedUsageLimit", "RequestUsageLimit"] {
+        await #expect(throws: CodexRewriteError.usageLimitReached) {
+            try await client.rewrite(
+                systemPrompt: "System rules", userPrompt: prompt, onProgress: nil
+            )
+        }
+    }
+
+    for prompt in ["OversizedID", "FractionalID"] {
+        await #expect(throws: CodexRewriteError.protocolViolation) {
+            try await client.rewrite(
+                systemPrompt: "System rules", userPrompt: prompt, onProgress: nil
+            )
+        }
+        #expect(try await client.accountSnapshot().isConnected)
+    }
     await client.shutdown()
+}
+
+@Test
+func appServerInitializationCancellationReturnsPromptlyAndRecovers() async throws {
+    let fixture = try CodexInitializationFixture(mode: "hang")
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    let task = Task { try await fixture.client.accountSnapshot() }
+    try await fixture.waitForInitialization()
+
+    // Keep a broken cancellation path from hanging the entire test process.
+    let watchdog = Task {
+        try await Task.sleep(for: .seconds(1))
+        await fixture.client.shutdown()
+    }
+    let started = ContinuousClock.now
+    task.cancel()
+    await #expect(throws: CancellationError.self) { try await task.value }
+    #expect(started.duration(to: .now) < .milliseconds(500))
+    watchdog.cancel()
+
+    try FileManager.default.removeItem(at: fixture.modeURL)
+    #expect(try await fixture.client.accountSnapshot().isConnected)
+    await fixture.client.shutdown()
+}
+
+@Test
+func appServerInitializationHasItsOwnDeadlineAndRecovers() async throws {
+    let fixture = try CodexInitializationFixture(mode: "hang", timeout: .seconds(1))
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    await #expect(throws: CodexRewriteError.attemptTimedOut) {
+        try await fixture.client.accountSnapshot()
+    }
+    try FileManager.default.removeItem(at: fixture.modeURL)
+    #expect(try await fixture.client.accountSnapshot().isConnected)
+    await fixture.client.shutdown()
+}
+
+@Test
+func cancellingOneInitializationWaiterPreservesAnother() async throws {
+    let fixture = try CodexInitializationFixture(mode: "delay")
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    let first = Task { try await fixture.client.accountSnapshot() }
+    let second = Task { try await fixture.client.accountSnapshot() }
+    try await fixture.waitForInitialization()
+    first.cancel()
+    await #expect(throws: CancellationError.self) { try await first.value }
+    #expect(try await second.value.isConnected)
+    let initializeCount = try String(
+        contentsOf: fixture.home.appendingPathComponent("initialize-count"),
+        encoding: .utf8
+    )
+    #expect(initializeCount == "1")
+    await fixture.client.shutdown()
+}
+
+private struct CodexInitializationFixture {
+    let directory: URL
+    let home: URL
+    let modeURL: URL
+    let client: CodexAppServerClient
+
+    init(mode: String, timeout: Duration = .seconds(6)) throws {
+        let fileManager = FileManager.default
+        directory = fileManager.temporaryDirectory.appendingPathComponent(
+            "RewriteBarCodexInitialization-\(UUID().uuidString)", isDirectory: true
+        )
+        let application = directory.appendingPathComponent("ChatGPT.app", isDirectory: true)
+        let executable = application.appendingPathComponent("Contents/Resources/codex")
+        try fileManager.createDirectory(
+            at: executable.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        try Data(codexFixtureScript.drop(while: { $0.isNewline }).utf8).write(to: executable)
+        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        home = directory.appendingPathComponent("CodexHome", isDirectory: true)
+        try fileManager.createDirectory(at: home, withIntermediateDirectories: true)
+        modeURL = home.appendingPathComponent("fixture-initialize-mode")
+        try Data(mode.utf8).write(to: modeURL)
+        client = CodexAppServerClient(
+            locator: CodexExecutableLocator(
+                applicationURLs: [application],
+                bundleIdentifier: { _ in "com.openai.codex" },
+                isExecutable: { $0 == executable },
+                hasTrustedSignature: { _ in true }
+            ),
+            homeURL: home,
+            initializationTimeout: timeout
+        )
+    }
+
+    func waitForInitialization() async throws {
+        let marker = home.appendingPathComponent("initialize-count")
+        for _ in 0..<200 {
+            if FileManager.default.fileExists(atPath: marker.path) { return }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        throw CodexRewriteError.attemptTimedOut
+    }
 }
 
 private let codexFixtureScript = #"""
@@ -384,6 +486,7 @@ private let codexFixtureScript = #"""
 import json
 import os
 import sys
+import time
 
 required_disabled_features = {
     "shell_tool", "unified_exec", "apps", "browser_use", "computer_use",
@@ -435,6 +538,10 @@ for line in sys.stdin:
         count = int(marker("initialize-count") or "0") + 1
         with open(count_path, "w", encoding="utf-8") as value:
             value.write(str(count))
+        if marker("fixture-initialize-mode") == "hang":
+            continue
+        if marker("fixture-initialize-mode") == "delay":
+            time.sleep(0.25)
         send({"jsonrpc": "2.0", "id": identifier, "result": {}})
     elif method == "account/read":
         account_mode = marker("fixture-account-mode")
@@ -445,11 +552,6 @@ for line in sys.stdin:
         else:
             account = {"type": "chatgpt", "planType": "pro"}
         send({"jsonrpc": "2.0", "id": identifier, "result": {"account": account}})
-    elif method == "account/rateLimits/read":
-        send({"jsonrpc": "2.0", "id": identifier, "result": {
-            "rateLimits": {"primary": {"usedPercent":
-                100 if marker("fixture-limit-mode") == "exhausted" else 5}}
-        }})
     elif method == "model/list":
         send({"jsonrpc": "2.0", "id": identifier, "result": {
             "data": [] if marker("fixture-model-mode") == "missing"
@@ -489,7 +591,8 @@ for line in sys.stdin:
             and params["input"][0].get("type") == "text"
             and params["input"][0].get("text") in [
                 "Rewrite source", "Hang", "Tool", "WebTool", "StaleEvents",
-                "ServerFailure", "MalformedProtocol"
+                "ServerFailure", "MalformedProtocol", "EndpointUsageLimit",
+                "CompletedUsageLimit", "RequestUsageLimit", "OversizedID", "FractionalID"
             ]
         )
         if not valid:
@@ -497,10 +600,33 @@ for line in sys.stdin:
                 "code": -32602, "message": "unsafe turn payload"
             }})
             continue
+        user_text = params["input"][0]["text"]
+        if user_text == "RequestUsageLimit":
+            send({"jsonrpc": "2.0", "id": identifier, "error": {
+                "code": -32000, "message": "Usage limit reached",
+                "data": {"codexErrorInfo": "usageLimitExceeded"}
+            }})
+            continue
         send({"jsonrpc": "2.0", "id": identifier, "result": {
             "turn": {"id": "turn-fixture", "status": "inProgress"}
         }})
-        user_text = params["input"][0]["text"]
+        if user_text in ["OversizedID", "FractionalID"]:
+            send({"jsonrpc": "2.0", "id": 1e100 if user_text == "OversizedID" else 1.5,
+                  "result": {}})
+            continue
+        if user_text == "EndpointUsageLimit":
+            send({"jsonrpc": "2.0", "method": "turn/failed", "params": {
+                "threadId": "thread-fixture", "turnId": "turn-fixture",
+                "message": "Usage limit reached", "codexErrorInfo": "usageLimitExceeded"
+            }})
+            continue
+        if user_text == "CompletedUsageLimit":
+            send({"jsonrpc": "2.0", "method": "turn/completed", "params": {
+                "threadId": "thread-fixture", "turn": {"id": "turn-fixture",
+                    "status": "failed", "error": {"message": "Usage limit reached",
+                    "codexErrorInfo": "usageLimitExceeded"}}
+            }})
+            continue
         if user_text == "Hang":
             send({"jsonrpc": "2.0", "method": "item/agentMessage/delta", "params": {
                 "threadId": "thread-fixture", "turnId": "turn-fixture",

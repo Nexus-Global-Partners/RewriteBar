@@ -52,19 +52,19 @@ func codexConnectionFeedbackAppearsOnlyAfterAReadyConnection() {
     #expect(
         CodexConnectionFeedbackPolicy.showsConfirmation(
             previous: .connecting,
-            current: .connected(plan: "pro", lunaAvailable: true, usedPercent: 19)
+            current: .connected(plan: "pro", lunaAvailable: true)
         )
     )
     #expect(
         !CodexConnectionFeedbackPolicy.showsConfirmation(
             previous: .checking,
-            current: .connected(plan: "pro", lunaAvailable: true, usedPercent: 19)
+            current: .connected(plan: "pro", lunaAvailable: true)
         )
     )
     #expect(
         !CodexConnectionFeedbackPolicy.showsConfirmation(
             previous: .connecting,
-            current: .connected(plan: "pro", lunaAvailable: false, usedPercent: 19)
+            current: .connected(plan: "pro", lunaAvailable: false)
         )
     )
 }
@@ -148,6 +148,29 @@ func accessibilityRefusesAmbiguousWindowSelectionFallback() {
             hasEditableSelection: { $0 == 1 || $0 == 2 }
         )
     }
+}
+
+@Test @MainActor
+func accessibilityRefusesAnIncompleteWindowSelectionScan() {
+    #expect(throws: AccessibilityRewriteFailure.selectionUnavailable) {
+        _ = try AccessibilitySelectionClient.uniqueSelectionCandidate(
+            roots: [0],
+            maximumVisitedElements: 2,
+            children: { $0 == 0 ? [1, 2] : [] },
+            hasEditableSelection: { $0 == 1 || $0 == 2 }
+        )
+    }
+}
+
+@Test @MainActor
+func accessibilityAcceptsACompleteScanAtItsLimit() throws {
+    let candidate = try AccessibilitySelectionClient.uniqueSelectionCandidate(
+        roots: [0],
+        maximumVisitedElements: 2,
+        children: { $0 == 0 ? [1] : [] },
+        hasEditableSelection: { $0 == 1 }
+    )
+    #expect(candidate == 1)
 }
 
 @Test @MainActor

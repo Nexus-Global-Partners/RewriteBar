@@ -18,13 +18,11 @@ struct CodexAccountSnapshot: Equatable, Sendable {
     let isConnected: Bool
     let plan: String?
     let lunaAvailable: Bool
-    let usedPercent: Double?
 
     static let disconnected = CodexAccountSnapshot(
         isConnected: false,
         plan: nil,
-        lunaAvailable: false,
-        usedPercent: nil
+        lunaAvailable: false
     )
 }
 
@@ -95,6 +93,11 @@ enum CodexJSONValue: Codable, Equatable, Sendable {
         guard case .number(let value) = self else { return nil }
         return value
     }
+
+    var integerValue: Int? {
+        guard let value = doubleValue else { return nil }
+        return Int(exactly: value)
+    }
 }
 
 private struct CodexRPCRequest: Encodable, Sendable {
@@ -129,6 +132,7 @@ actor CodexAppServerClient {
     private let fileManager: FileManager
     private let homeURLOverride: URL?
     private let accountSnapshotCacheLifetime: TimeInterval
+    private let initializationTimeout: Duration
     private var process: Process?
     private var processGeneration: UUID?
     private var inputHandle: FileHandle?
@@ -139,7 +143,10 @@ actor CodexAppServerClient {
     ] = [:]
     private var pendingRequestMethods: [Int: String] = [:]
     private var initialized = false
-    private var initializationTask: Task<Void, any Error>?
+    private var initializationTask: Task<Void, Never>?
+    private var initializationWaiters: [
+        UUID: CheckedContinuation<Void, any Error>
+    ] = [:]
     private var cachedAccountSnapshot: CachedAccountSnapshot?
     private var turnReserved = false
     private var activeThreadID: String?
@@ -153,12 +160,14 @@ actor CodexAppServerClient {
         locator: CodexExecutableLocator = CodexExecutableLocator(),
         fileManager: FileManager = .default,
         homeURL: URL? = nil,
-        accountSnapshotCacheLifetime: TimeInterval = 300
+        accountSnapshotCacheLifetime: TimeInterval = 300,
+        initializationTimeout: Duration = .seconds(6)
     ) {
         self.locator = locator
         self.fileManager = fileManager
         homeURLOverride = homeURL
         self.accountSnapshotCacheLifetime = max(0, accountSnapshotCacheLifetime)
+        self.initializationTimeout = initializationTimeout
     }
 
     func accountSnapshot(forceRefresh: Bool = false) async throws -> CodexAccountSnapshot {
@@ -197,12 +206,10 @@ actor CodexAppServerClient {
                     || object?["model"]?.stringValue == AppConstants.codexLunaModelIdentifier
             }) ?? false
 
-        let limits = try? await request(method: "account/rateLimits/read")
         let snapshot = CodexAccountSnapshot(
             isConnected: true,
             plan: account.firstString(forKeys: ["planType", "plan", "type"]),
-            lunaAvailable: lunaAvailable,
-            usedPercent: limits?.firstNumber(forKeys: ["usedPercent"])
+            lunaAvailable: lunaAvailable
         )
         cacheAccountSnapshot(snapshot)
         return snapshot
@@ -246,10 +253,6 @@ actor CodexAppServerClient {
         guard account.lunaAvailable else {
             cachedAccountSnapshot = nil
             throw CodexRewriteError.lunaUnavailable
-        }
-        if let usedPercent = account.usedPercent, usedPercent >= 100 {
-            cachedAccountSnapshot = nil
-            throw CodexRewriteError.usageLimitReached
         }
 
         let homeURL = try prepareIsolatedDirectories()
@@ -369,29 +372,61 @@ actor CodexAppServerClient {
     """
 
     private func ensureInitialized() async throws {
+        try Task.checkCancellation()
         try startProcessIfNeeded()
         guard !initialized else { return }
-        if let initializationTask {
-            return try await initializationTask.value
-        }
         guard let generation = processGeneration else {
             throw CodexRewriteError.transportUnavailable
         }
-        let task = Task { [weak self] in
-            guard let self else { throw CodexRewriteError.transportUnavailable }
-            try await self.initializeRuntime(generation: generation)
-        }
-        initializationTask = task
-        do {
-            try await task.value
-            guard processGeneration == generation else {
-                throw CodexRewriteError.transportUnavailable
+        let waiterID = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                guard !Task.isCancelled else {
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                initializationWaiters[waiterID] = continuation
+                guard initializationTask == nil else { return }
+                initializationTask = Task { [weak self] in
+                    guard let self else { return }
+                    do {
+                        try await self.initializeRuntime(generation: generation)
+                        await self.finishInitialization(generation: generation, error: nil)
+                    } catch {
+                        await self.finishInitialization(generation: generation, error: error)
+                    }
+                }
             }
-            initialized = true
-            initializationTask = nil
-        } catch {
-            initializationTask = nil
-            throw error
+        } onCancel: {
+            Task { await self.cancelInitializationWaiter(waiterID, generation: generation) }
+        }
+    }
+
+    private func cancelInitializationWaiter(_ waiterID: UUID, generation: UUID) {
+        guard processGeneration == generation else { return }
+        initializationWaiters.removeValue(forKey: waiterID)?
+            .resume(throwing: CancellationError())
+        // A Settings refresh can share startup with a rewrite. Only tear down
+        // startup once no caller still needs it.
+        if initializationWaiters.isEmpty, !initialized {
+            failAllPending(with: CancellationError())
+            stopProcess()
+        }
+    }
+
+    private func finishInitialization(generation: UUID, error: (any Error)?) {
+        guard processGeneration == generation else { return }
+        initializationTask = nil
+        if let error {
+            failAllPending(with: error)
+            stopProcess()
+            return
+        }
+        initialized = true
+        let waiters = initializationWaiters.values
+        initializationWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
         }
     }
 
@@ -399,21 +434,31 @@ actor CodexAppServerClient {
         guard processGeneration == generation else {
             throw CodexRewriteError.transportUnavailable
         }
-        _ = try await request(
-            method: "initialize",
-            params: .object([
-                "clientInfo": .object([
-                    "name": .string(AppConstants.appName),
-                    "version": .string(
-                        Bundle.main.object(
-                            forInfoDictionaryKey: "CFBundleShortVersionString"
-                        ) as? String ?? "development"
-                    )
-                ]),
-                "capabilities": .object(["experimentalApi": .bool(false)])
-            ]),
-            ensureProcess: false
-        )
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                _ = try await self.request(
+                    method: "initialize",
+                    params: .object([
+                        "clientInfo": .object([
+                            "name": .string(AppConstants.appName),
+                            "version": .string(
+                                Bundle.main.object(
+                                    forInfoDictionaryKey: "CFBundleShortVersionString"
+                                ) as? String ?? "development"
+                            )
+                        ]),
+                        "capabilities": .object(["experimentalApi": .bool(false)])
+                    ]),
+                    ensureProcess: false
+                )
+            }
+            group.addTask {
+                try await Task.sleep(for: self.initializationTimeout)
+                throw CodexRewriteError.attemptTimedOut
+            }
+            defer { group.cancelAll() }
+            _ = try await group.next()
+        }
     }
 
     private func startProcessIfNeeded() throws {
@@ -609,15 +654,18 @@ actor CodexAppServerClient {
 
     private func handle(_ message: CodexJSONValue) {
         guard let object = message.objectValue else { return }
-        if let id = object["id"]?.doubleValue.map(Int.init),
+        if let rawID = object["id"], rawID.integerValue == nil {
+            failAllPending(with: CodexRewriteError.protocolViolation)
+            stopProcess()
+            return
+        }
+        if object["method"] == nil,
+           let id = object["id"]?.integerValue,
            let continuation = pendingResponses.removeValue(forKey: id) {
             let requestMethod = pendingRequestMethods.removeValue(forKey: id)
             if let error = object["error"], error != .null {
                 continuation.resume(
-                    throwing: CodexRewriteError.serverFailure(
-                        error.firstString(forKeys: ["message", "codexErrorInfo"])
-                            ?? "request failed"
-                    )
+                    throwing: Self.protocolError(error, fallback: "request failed")
                 )
             } else {
                 let result = object["result"] ?? .null
@@ -672,15 +720,17 @@ actor CodexAppServerClient {
                 .objectValue?["turn"]?
                 .objectValue?["status"]?
                 .stringValue ?? "failed"
+            if status == "failed", let error = params.objectValue?["turn"]?
+                .objectValue?["error"], error != .null {
+                failActiveTurn(with: Self.protocolError(error, fallback: "turn failed"))
+                return
+            }
             turnContinuation?.yield(.completed(status))
             turnContinuation?.finish()
         case "turn/failed", "error":
             guard isCurrentTurnEvent else { return }
             failActiveTurn(
-                with: CodexRewriteError.serverFailure(
-                    params.firstString(forKeys: ["message", "codexErrorInfo"])
-                        ?? "turn failed"
-                )
+                with: Self.protocolError(params, fallback: "turn failed")
             )
         default:
             if isCurrentTurnEvent && Self.isUnsafeEventName(method) {
@@ -721,7 +771,7 @@ actor CodexAppServerClient {
     }
 
     private func denyServerRequest(message: [String: CodexJSONValue]) {
-        guard let id = message["id"]?.doubleValue.map(Int.init),
+        guard let id = message["id"]?.integerValue,
               let inputHandle else { return }
         let response = CodexRPCResponse(
             id: id,
@@ -734,6 +784,16 @@ actor CodexAppServerClient {
         guard var data = try? JSONEncoder().encode(response) else { return }
         data.append(0x0A)
         try? inputHandle.write(contentsOf: data)
+    }
+
+    private static func protocolError(
+        _ value: CodexJSONValue,
+        fallback: String
+    ) -> CodexRewriteError {
+        if value.firstString(forKeys: ["codexErrorInfo"]) == "usageLimitExceeded" {
+            return .usageLimitReached
+        }
+        return .serverFailure(value.firstString(forKeys: ["message"]) ?? fallback)
     }
 
     private func interruptActiveTurn() async {
@@ -794,6 +854,11 @@ actor CodexAppServerClient {
     }
 
     private func failAllPending(with error: any Error) {
+        let initializationContinuations = initializationWaiters.values
+        initializationWaiters.removeAll()
+        for continuation in initializationContinuations {
+            continuation.resume(throwing: error)
+        }
         let continuations = pendingResponses.values
         pendingResponses.removeAll()
         pendingRequestMethods.removeAll()
@@ -842,22 +907,4 @@ private extension CodexJSONValue {
         return nil
     }
 
-    func firstNumber(forKeys keys: [String]) -> Double? {
-        switch self {
-        case .object(let object):
-            for key in keys {
-                if let value = object[key]?.doubleValue { return value }
-            }
-            for value in object.values {
-                if let match = value.firstNumber(forKeys: keys) { return match }
-            }
-        case .array(let values):
-            for value in values {
-                if let match = value.firstNumber(forKeys: keys) { return match }
-            }
-        case .null, .bool, .number, .string:
-            break
-        }
-        return nil
-    }
 }

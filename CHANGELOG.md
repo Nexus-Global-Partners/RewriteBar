@@ -9,9 +9,12 @@
 * Press the shortcut again to cancel. Changing the slider returns focus to the previous app.
 * Added Open at Login and actionable connection, account, usage, and timeout feedback.
 * Preserved isolated ChatGPT sign-in, disabled model tools, structured output, source protection, and guarded selection replacement.
+* Rejects incomplete selection scans and waits for the previous app to close before installing an update.
+* Bounds Codex startup, keeps cancellation responsive during connection, and recovers from malformed responses without crashing.
+* Uses the rewrite service's actual usage-limit response, removes misleading account percentages, and avoids idle Settings polling.
 
 
-## 1.4.0
+## 1.4.0 (development preview, superseded by 2.0.0)
 
 * Adds an optional Codex Luna online processing mode backed by a user's ChatGPT subscription, while keeping the bundled Qwen model as the default.
 * Makes Luna rewrites complete faster, verifies selected text was actually replaced before showing success, and distinguishes clipboard-only recovery from replacement.

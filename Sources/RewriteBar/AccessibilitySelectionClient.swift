@@ -423,6 +423,10 @@ final class AccessibilitySelectionClient {
             queue.append(contentsOf: try children(element))
         }
 
+        // A partial scan cannot establish that the selection is unique.
+        guard index == queue.count else {
+            throw AccessibilityRewriteFailure.selectionUnavailable
+        }
         return candidate
     }
 
